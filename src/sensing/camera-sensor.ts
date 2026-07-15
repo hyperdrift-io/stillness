@@ -18,6 +18,8 @@ export class CameraSensor {
   private stream: MediaStream | null = null;
   private video: HTMLVideoElement | null = null;
   private animationFrame = 0;
+  private analysisCanvas: HTMLCanvasElement | null = null;
+  private analysisContext: CanvasRenderingContext2D | null = null;
   private previousLuminance: Uint8Array | null = null;
   private latest = { ...initialObservation };
   private lastSampleTime = 0;
@@ -39,8 +41,13 @@ export class CameraSensor {
       video.playsInline = true;
       video.srcObject = stream;
       await video.play();
+      const analysisCanvas = document.createElement('canvas');
+      analysisCanvas.width = 64;
+      analysisCanvas.height = 48;
       this.stream = stream;
       this.video = video;
+      this.analysisCanvas = analysisCanvas;
+      this.analysisContext = analysisCanvas.getContext('2d', { willReadFrequently: true });
       this.animationFrame = requestAnimationFrame(this.sample);
       return true;
     } catch {
@@ -62,6 +69,8 @@ export class CameraSensor {
     }
     this.stream = null;
     this.video = null;
+    this.analysisCanvas = null;
+    this.analysisContext = null;
     this.previousLuminance = null;
     this.latest = { ...initialObservation };
   }
@@ -77,12 +86,10 @@ export class CameraSensor {
   };
 
   private analyseFrame(video: HTMLVideoElement): CameraObservation {
-    const width = 64;
-    const height = 48;
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext('2d', { willReadFrequently: true });
+    const canvas = this.analysisCanvas;
+    const context = this.analysisContext;
+    const width = canvas?.width ?? 64;
+    const height = canvas?.height ?? 48;
     if (!context) return { ...initialObservation };
     context.drawImage(video, 0, 0, width, height);
     const pixels = context.getImageData(0, 0, width, height).data;

@@ -27,12 +27,13 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-      if (response.ok) {
-        const copy = response.clone();
-        caches.open(CACHE).then((cache) => cache.put(request, copy));
-      }
-      return response;
-    })),
+    caches.open(CACHE).then(async (cache) => {
+      const cached = await cache.match(request);
+      const refreshed = fetch(request).then((response) => {
+        if (response.ok) void cache.put(request, response.clone());
+        return response;
+      });
+      return cached ?? refreshed;
+    }),
   );
 });
