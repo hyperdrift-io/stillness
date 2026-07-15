@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Stillness">
+  <defs>
+    <radialGradient id="field">
+      <stop offset="0" stop-color="#fff8dc"/>
+      <stop offset="0.025" stop-color="#ffd184"/>
+      <stop offset="0.12" stop-color="#f3a44f" stop-opacity=".4"/>
+      <stop offset=".58" stop-color="#3b2249" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#030407" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#030407"/>
+  <circle cx="256" cy="256" r="190" fill="url(#field)"/>
+  <circle cx="256" cy="256" r="122" fill="none" stroke="#a7c7ff" stroke-opacity=".3" stroke-width="2"/>
+  <circle cx="256" cy="256" r="4" fill="#fff8dc"/>
+</svg>

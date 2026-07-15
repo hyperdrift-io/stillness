@@ -1,0 +1,22 @@
+{
+  "id": "/",
+  "name": "Stillness",
+  "short_name": "Stillness",
+  "description": "A private audiovisual descent from activation into stillness.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "portrait-primary",
+  "background_color": "#030407",
+  "theme_color": "#030407",
+  "categories": ["health", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
