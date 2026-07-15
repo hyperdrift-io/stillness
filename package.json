@@ -3,12 +3,17 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22.10"
+  },
   "scripts": {
     "dev": "waku dev",
     "build": "waku build",
     "start": "waku start --port ${PORT:-8080} --host ${HOST:-127.0.0.1}",
     "type-check": "tsc --noEmit",
     "test": "node --test --experimental-strip-types tests/*.test.ts",
+    "test:browser": "pnpm run build && node scripts/browser-smoke.mjs",
     "typegen": "waku router typegen"
   },
   "dependencies": {

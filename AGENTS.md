@@ -28,4 +28,5 @@ pnpm dev
 pnpm test
 pnpm run type-check
 pnpm run build
+pnpm run test:browser
 ```

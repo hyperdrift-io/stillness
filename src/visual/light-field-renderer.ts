@@ -58,7 +58,9 @@ export class LightFieldRenderer {
   resize = (): void => {
     const gl = this.gl;
     if (!gl) return;
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    const reducedMotion = this.reducedMotionQuery.matches;
+    const lowPower = (navigator.hardwareConcurrency || 8) <= 4;
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, reducedMotion ? 1 : lowPower ? 1.25 : 2);
     const width = Math.max(1, Math.floor(this.canvas.clientWidth * pixelRatio));
     const height = Math.max(1, Math.floor(this.canvas.clientHeight * pixelRatio));
     if (this.canvas.width !== width || this.canvas.height !== height) {
@@ -159,6 +161,14 @@ export class LightFieldRenderer {
     const uniforms = this.uniforms;
     if (!gl || !uniforms) return;
 
+    const reducedMotion = this.reducedMotionQuery.matches;
+    const lowPower = (navigator.hardwareConcurrency || 8) <= 4;
+    const frameInterval = reducedMotion ? 250 : lowPower ? 1000 / 30 : 0;
+    if (now - this.lastFrame < frameInterval) {
+      this.animationFrame = requestAnimationFrame(this.render);
+      return;
+    }
+
     const deltaSeconds = Math.min(0.1, Math.max(0, (now - this.lastFrame) / 1_000));
     this.lastFrame = now;
     for (const key of Object.keys(this.current) as (keyof ResonanceState)[]) {
@@ -170,7 +180,7 @@ export class LightFieldRenderer {
       (now - this.startTime) / 1_000,
       this.canvas.width,
       this.canvas.height,
-      this.reducedMotionQuery.matches,
+      reducedMotion,
     );
 
     gl.useProgram(this.program);
@@ -210,6 +220,6 @@ export class LightFieldRenderer {
     this.initializeContext();
     this.resize();
     this.lastFrame = performance.now();
-    this.animationFrame = requestAnimationFrame(this.render);
+    if (!document.hidden) this.animationFrame = requestAnimationFrame(this.render);
   };
 }

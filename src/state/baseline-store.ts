@@ -41,11 +41,15 @@ export class BaselineStore {
   async load(): Promise<PersonalBaseline | null> {
     if (!('indexedDB' in globalThis)) return null;
     const database = await this.open();
-    return new Promise((resolve, reject) => {
-      const request = database.transaction(STORE, 'readonly').objectStore(STORE).get(KEY);
-      request.addEventListener('success', () => resolve((request.result as PersonalBaseline | undefined) ?? null));
-      request.addEventListener('error', () => reject(request.error));
-    });
+    try {
+      return await new Promise((resolve, reject) => {
+        const request = database.transaction(STORE, 'readonly').objectStore(STORE).get(KEY);
+        request.addEventListener('success', () => resolve((request.result as PersonalBaseline | undefined) ?? null));
+        request.addEventListener('error', () => reject(request.error));
+      });
+    } finally {
+      database.close();
+    }
   }
 
   async saveSession(summary: SessionSummary): Promise<PersonalBaseline | null> {
@@ -53,22 +57,30 @@ export class BaselineStore {
     const current = await this.load();
     const next = mergeBaseline(current, summary);
     const database = await this.open();
-    await new Promise<void>((resolve, reject) => {
-      const request = database.transaction(STORE, 'readwrite').objectStore(STORE).put(next, KEY);
-      request.addEventListener('success', () => resolve());
-      request.addEventListener('error', () => reject(request.error));
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const request = database.transaction(STORE, 'readwrite').objectStore(STORE).put(next, KEY);
+        request.addEventListener('success', () => resolve());
+        request.addEventListener('error', () => reject(request.error));
+      });
+    } finally {
+      database.close();
+    }
     return next;
   }
 
   async clear(): Promise<void> {
     if (!('indexedDB' in globalThis)) return;
     const database = await this.open();
-    await new Promise<void>((resolve, reject) => {
-      const request = database.transaction(STORE, 'readwrite').objectStore(STORE).delete(KEY);
-      request.addEventListener('success', () => resolve());
-      request.addEventListener('error', () => reject(request.error));
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const request = database.transaction(STORE, 'readwrite').objectStore(STORE).delete(KEY);
+        request.addEventListener('success', () => resolve());
+        request.addEventListener('error', () => reject(request.error));
+      });
+    } finally {
+      database.close();
+    }
   }
 
   private open(): Promise<IDBDatabase> {

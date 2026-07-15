@@ -145,17 +145,23 @@ export class StillnessAudio {
     if (!context) return;
     const now = context.currentTime;
     this.master?.gain.cancelScheduledValues(now);
-    this.master?.gain.setTargetAtTime(0.0001, now, 0.02);
+    if (context.state === 'running') this.master?.gain.setTargetAtTime(0.0001, now, 0.02);
     for (const source of this.sources) {
       try {
-        source.stop(now + 0.08);
+        source.stop(context.state === 'running' ? now + 0.08 : now);
       } catch {
         // A source may already have ended during an interruption.
       }
     }
+    const close = () => {
+      if (context.state !== 'closed') void context.close().catch(() => {});
+    };
     const lastSource = this.sources.at(-1);
-    if (lastSource) lastSource.addEventListener('ended', () => void context.close(), { once: true });
-    else void context.close();
+    if (context.state !== 'running') close();
+    else if (lastSource) {
+      lastSource.addEventListener('ended', close, { once: true });
+      window.setTimeout(close, 400);
+    } else close();
     this.sources = [];
     this.context = null;
     this.master = null;

@@ -25,6 +25,7 @@ export class CameraSensor {
   private lastSampleTime = 0;
 
   async start(): Promise<boolean> {
+    if (this.stream) return true;
     if (!navigator.mediaDevices?.getUserMedia) return false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -40,12 +41,13 @@ export class CameraSensor {
       video.muted = true;
       video.playsInline = true;
       video.srcObject = stream;
+      // Take ownership before playback so a rejected play() cannot leak tracks.
+      this.stream = stream;
+      this.video = video;
       await video.play();
       const analysisCanvas = document.createElement('canvas');
       analysisCanvas.width = 64;
       analysisCanvas.height = 48;
-      this.stream = stream;
-      this.video = video;
       this.analysisCanvas = analysisCanvas;
       this.analysisContext = analysisCanvas.getContext('2d', { willReadFrequently: true });
       this.animationFrame = requestAnimationFrame(this.sample);

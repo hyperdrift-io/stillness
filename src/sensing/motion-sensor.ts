@@ -11,6 +11,7 @@ export class MotionSensor {
   private running = false;
 
   async start(): Promise<boolean> {
+    if (this.running) return true;
     if (!('DeviceMotionEvent' in window)) return false;
     const constructor = DeviceMotionEvent as PermissionAwareDeviceMotion;
     if (constructor.requestPermission) {

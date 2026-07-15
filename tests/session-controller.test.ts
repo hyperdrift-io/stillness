@@ -7,8 +7,17 @@ import {
   type SessionDependencies,
 } from '../src/experience/session-controller.ts';
 import type { ResonanceState } from '../src/resonance/resonance.ts';
+import type { PersonalBaseline } from '../src/state/baseline-store.ts';
 
-function createHarness(observationConfidence = 0): {
+type HarnessOptions = {
+  now?: () => number;
+  baseline?: {
+    load: () => Promise<PersonalBaseline | null>;
+    saveSession: SessionDependencies['baseline']['saveSession'];
+  };
+};
+
+function createHarness(observationConfidence = 0, options: HarnessOptions = {}): {
   controller: SessionController;
   updates: ResonanceState[];
   calls: string[];
@@ -43,10 +52,11 @@ function createHarness(observationConfidence = 0): {
       read: () => ({ motion: 0.8, confidence: observationConfidence }),
       stop: () => calls.push('motion:stop'),
     },
-    baseline: {
+    baseline: options.baseline ?? {
+      load: async () => null,
       saveSession: async () => null,
     },
-    now: () => 0,
+    now: options.now ?? (() => 0),
     requestFrame: () => 7,
     cancelFrame: () => calls.push('frame:cancel'),
   };
@@ -89,6 +99,31 @@ test('SessionController lets confident activation evidence hold more energy', as
   );
 });
 
+test('SessionController applies a loaded personal baseline to sensor evidence', async () => {
+  const uncalibrated = createHarness(1);
+  const calibrated = createHarness(1, {
+    baseline: {
+      load: async () => ({
+        activationMean: 1,
+        stabilityMean: 0,
+        sessionCount: 3,
+        updatedAt: 1,
+      }),
+      saveSession: async () => null,
+    },
+  });
+  await uncalibrated.controller.start();
+  await calibrated.controller.start();
+  await Promise.resolve();
+  uncalibrated.controller.step(180_000);
+  calibrated.controller.step(180_000);
+
+  assert.ok(
+    (calibrated.updates.at(-1)?.complexity ?? 1) <
+    (uncalibrated.updates.at(-1)?.complexity ?? 0),
+  );
+});
+
 test('SessionController suspends, resumes, and disposes every resource', async () => {
   const { controller, calls } = createHarness();
   await controller.start();
@@ -103,4 +138,36 @@ test('SessionController suspends, resumes, and disposes every resource', async (
   assert.ok(calls.includes('camera:stop'));
   assert.ok(calls.includes('motion:stop'));
   assert.ok(calls.includes('frame:cancel'));
+});
+
+test('SessionController excludes hidden time and restarts sensing when visible', async () => {
+  let now = 0;
+  const { controller, calls } = createHarness(0, { now: () => now });
+  await controller.start();
+  controller.step(1_000);
+  now = 1_000;
+  await controller.setHidden(true);
+  now = 61_000;
+  await controller.setHidden(false);
+  controller.step(61_000);
+
+  assert.equal(controller.snapshot().elapsedMs, 1_000);
+  assert.ok(calls.includes('audio:suspend'));
+  assert.ok(calls.includes('audio:resume'));
+});
+
+test('SessionController completes teardown when calibration storage fails', async () => {
+  const { controller, calls } = createHarness(1, {
+    baseline: {
+      load: async () => null,
+      saveSession: async () => { throw new Error('storage unavailable'); },
+    },
+  });
+  await controller.start();
+  for (let index = 0; index < 10; index += 1) controller.step(index * 100);
+  await assert.doesNotReject(() => controller.stop());
+
+  assert.ok(calls.includes('renderer:dispose'));
+  assert.ok(calls.includes('audio:dispose'));
+  assert.equal(controller.snapshot().running, false);
 });

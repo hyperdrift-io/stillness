@@ -39,15 +39,19 @@ test('service worker caches the shell and is registered by the client island', a
   assert.match(worker, /stillness-shell-v\d+/);
   assert.match(worker, /caches\.open/);
   assert.match(worker, /request\.mode === 'navigate'/);
+  assert.match(worker, /addEventListener\('message'/);
   assert.match(experience, /serviceWorker\.register\('\/sw\.js'\)/);
+  assert.match(experience, /postMessage/);
 });
 
 test('public discovery and metadata assets are present', async () => {
   const robots = await read('public/robots.txt');
   const sitemap = await read('public/sitemap.xml');
   const layout = await read('src/pages/_layout.tsx');
+  const rootElement = await read('src/pages/_root.tsx');
   assert.match(robots, /Allow: \//);
   assert.match(sitemap, /<urlset/);
   assert.match(layout, /manifest\.webmanifest/);
   assert.match(layout, /og:title/);
+  assert.match(rootElement, /<html lang="en">/);
 });

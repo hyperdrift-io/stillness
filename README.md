@@ -14,3 +14,13 @@ Open the local HTTPS or localhost URL. A single **Begin** gesture unlocks browse
 ## Privacy
 
 Camera and motion observations are processed on device. Raw frames and samples are never stored or transmitted. Local calibration contains aggregate session summaries only and can be cleared from the entry screen.
+
+## Verify
+
+```bash
+pnpm test
+pnpm run type-check
+pnpm run test:browser
+```
+
+The browser smoke gate uses an installed Chrome without adding a browser automation dependency. It verifies WebGL startup, camera fallback-safe cleanup, reduced motion, and an offline reload after first use.

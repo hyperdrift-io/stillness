@@ -21,14 +21,24 @@ export function StillnessExperience() {
   const leave = useCallback(async () => {
     const controller = controllerRef.current;
     controllerRef.current = null;
-    if (controller) await controller.stop();
-    setMode('ready');
-    setMessage('');
+    try {
+      if (controller) await controller.stop();
+    } finally {
+      setMode('ready');
+      setMessage('');
+    }
   }, []);
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      void navigator.serviceWorker.register('/sw.js').catch(() => {
+      void navigator.serviceWorker.register('/sw.js').then(async () => {
+        const registration = await navigator.serviceWorker.ready;
+        const urls = performance.getEntriesByType('resource')
+          .map((entry) => new URL(entry.name))
+          .filter((url) => url.origin === window.location.origin)
+          .map((url) => `${url.pathname}${url.search}`);
+        registration.active?.postMessage({ type: 'CACHE_URLS', urls });
+      }).catch(() => {
         // The experience remains available online when registration is blocked.
       });
     }
@@ -84,15 +94,24 @@ export function StillnessExperience() {
   }
 
   async function clearCalibration(): Promise<void> {
-    await baselineRef.current.clear();
-    setMessage('Local calibration cleared. Your next session can begin fresh.');
+    try {
+      await baselineRef.current.clear();
+      setMessage('Local calibration cleared. Your next session can begin fresh.');
+    } catch {
+      setMessage('This browser could not clear local calibration. You can still begin normally.');
+    }
   }
 
   return (
     <div className="experience" data-mode={mode} data-testid="stillness-experience">
       <canvas className="light-field" ref={canvasRef} aria-hidden="true" />
 
-      <section className="entry-panel" aria-labelledby="stillness-title">
+      <section
+        className="entry-panel"
+        aria-labelledby="stillness-title"
+        aria-hidden={mode === 'active'}
+        inert={mode === 'active' ? true : undefined}
+      >
         <div className="entry-presence" aria-hidden="true" />
         <div className="entry-copy">
           <p className="eyebrow">Stillness</p>
@@ -124,9 +143,11 @@ export function StillnessExperience() {
         </div>
       </section>
 
-      <button className="exit-session" type="button" onClick={() => void leave()}>
-        Leave experience
-      </button>
+      {mode === 'active' ? (
+        <button className="exit-session" type="button" onClick={() => void leave()}>
+          Leave experience
+        </button>
+      ) : null}
       <p className="visually-hidden" aria-live="polite">
         {mode === 'active' ? 'The experience has begun. Press Escape to leave.' : ''}
       </p>

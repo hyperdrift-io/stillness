@@ -4,6 +4,7 @@ import { targetResonance, type ResonanceState } from '../resonance/resonance.ts'
 import { FeatureWindow } from '../sensing/feature-window.ts';
 import type { CameraObservation } from '../sensing/camera-sensor.ts';
 import type { MotionObservation } from '../sensing/motion-sensor.ts';
+import type { PersonalBaseline } from '../state/baseline-store.ts';
 import { estimateState } from '../state/state-estimator.ts';
 
 type RendererPort = {
@@ -33,6 +34,7 @@ type MotionPort = {
 };
 
 type BaselinePort = {
+  load: () => Promise<PersonalBaseline | null>;
   saveSession: (summary: {
     activationMean: number;
     stabilityMean: number;
@@ -84,8 +86,10 @@ export class SessionController {
   private startTime = 0;
   private frame = 0;
   private elapsedMs = 0;
+  private pausedAt: number | null = null;
   private phase: RegulationPhase = 'capture';
   private sensorConfidence = 0;
+  private personalBaseline: PersonalBaseline | null = null;
   private audioAvailable = true;
   private activationTotal = 0;
   private stabilityTotal = 0;
@@ -102,6 +106,7 @@ export class SessionController {
     this.running = true;
     this.startTime = this.dependencies.now();
     this.elapsedMs = 0;
+    this.pausedAt = null;
     this.phase = 'capture';
 
     // These calls occur before the first await so browser permission and audio
@@ -109,6 +114,7 @@ export class SessionController {
     const cameraPromise = this.dependencies.camera.start();
     const motionPromise = this.dependencies.motion.start();
     const audioPromise = this.dependencies.audio.start();
+    const baselinePromise = this.dependencies.baseline.load();
     this.dependencies.renderer.start();
     this.frame = this.dependencies.requestFrame(this.onFrame);
 
@@ -118,6 +124,11 @@ export class SessionController {
     void motionPromise.then(() => {
       if (!this.running) this.dependencies.motion.stop();
     }).catch(() => {});
+    void baselinePromise.then((baseline) => {
+      if (this.running) this.personalBaseline = baseline;
+    }).catch(() => {
+      // Local calibration is an enhancement, never a condition for beginning.
+    });
 
     try {
       await audioPromise;
@@ -147,21 +158,32 @@ export class SessionController {
       settlingTrend: Math.max(-1, Math.min(1, -(cameraWindow.slopePerSecond + motionWindow.slopePerSecond) * 4)),
       confidence: this.sensorConfidence,
     });
+    const calibrated = this.personalBaseline
+      ? {
+          ...measured,
+          activation: clamp01(
+            measured.activation + (0.65 - this.personalBaseline.activationMean) * 0.35,
+          ),
+          stability: clamp01(
+            measured.stability + (0.35 - this.personalBaseline.stabilityMean) * 0.35,
+          ),
+        }
+      : measured;
     const scripted = scriptedStateForElapsed(this.elapsedMs);
     const adaptation = this.sensorConfidence * 0.65;
     const state: StateEstimate = {
-      activation: interpolate(scripted.activation, measured.activation, adaptation),
-      stability: interpolate(scripted.stability, measured.stability, adaptation),
-      presence: interpolate(scripted.presence, measured.presence, adaptation),
-      trend: interpolate(scripted.trend, measured.trend, adaptation),
+      activation: interpolate(scripted.activation, calibrated.activation, adaptation),
+      stability: interpolate(scripted.stability, calibrated.stability, adaptation),
+      presence: interpolate(scripted.presence, calibrated.presence, adaptation),
+      trend: interpolate(scripted.trend, calibrated.trend, adaptation),
       confidence: 1,
     };
     const resonance = targetResonance(state, this.phase);
     this.dependencies.renderer.update(resonance);
     if (this.audioAvailable) this.dependencies.audio.update(resonance, this.elapsedMs / 1_000);
 
-    this.activationTotal += state.activation;
-    this.stabilityTotal += state.stability;
+    this.activationTotal += calibrated.activation;
+    this.stabilityTotal += calibrated.stability;
     this.sampleCount += 1;
     return resonance;
   }
@@ -176,9 +198,23 @@ export class SessionController {
   }
 
   async setHidden(hidden: boolean): Promise<void> {
-    if (!this.running || !this.audioAvailable) return;
-    if (hidden) await this.dependencies.audio.suspend();
-    else await this.dependencies.audio.resume();
+    if (!this.running) return;
+    if (hidden) {
+      if (this.pausedAt !== null) return;
+      this.pausedAt = this.dependencies.now();
+      this.dependencies.cancelFrame(this.frame);
+      this.dependencies.camera.stop();
+      this.dependencies.motion.stop();
+      if (this.audioAvailable) await this.dependencies.audio.suspend().catch(() => {});
+      return;
+    }
+    if (this.pausedAt === null) return;
+    this.startTime += Math.max(0, this.dependencies.now() - this.pausedAt);
+    this.pausedAt = null;
+    void this.dependencies.camera.start().catch(() => {});
+    void this.dependencies.motion.start().catch(() => {});
+    if (this.audioAvailable) await this.dependencies.audio.resume().catch(() => {});
+    this.frame = this.dependencies.requestFrame(this.onFrame);
   }
 
   async stop(): Promise<void> {
@@ -191,10 +227,12 @@ export class SessionController {
     this.dependencies.audio.dispose();
 
     if (this.sampleCount >= 10) {
-      await this.dependencies.baseline.saveSession({
+      void this.dependencies.baseline.saveSession({
         activationMean: this.activationTotal / this.sampleCount,
         stabilityMean: this.stabilityTotal / this.sampleCount,
         sampleCount: this.sampleCount,
+      }).catch(() => {
+        // Resource cleanup and returning control to the user take precedence.
       });
     }
   }

@@ -66,7 +66,7 @@ float glow(float distanceToShape, float intensity) {
 
 void main() {
   vec2 p = (2.0 * gl_FragCoord.xy - u_resolution.xy) / min(u_resolution.x, u_resolution.y);
-  float timeScale = mix(1.0, 0.12, u_reducedMotion);
+  float timeScale = mix(1.0, 0.0, u_reducedMotion);
   float t = u_time * timeScale;
   float radius = length(p);
   float angle = atan(p.y, p.x);
@@ -86,9 +86,15 @@ void main() {
   float wRadius = length(w);
   float wAngle = atan(w.y, w.x);
 
-  float branches = mix(3.0, 12.0, u_complexity);
-  float swirl = wAngle * branches + wRadius * mix(5.0, 20.0, u_complexity) - t * mix(0.06, 0.26, u_turbulence);
-  float filamentShape = abs(sin(swirl + fbm(w * 3.0) * 3.0 * u_turbulence));
+  float branchLevel = mix(3.0, 12.0, u_complexity);
+  float lowerBranches = floor(branchLevel);
+  float branchBlend = smoothstep(0.2, 0.8, fract(branchLevel));
+  float radialPhase = wRadius * mix(5.0, 20.0, u_complexity);
+  float timePhase = t * mix(0.06, 0.26, u_turbulence);
+  float noisePhase = fbm(w * 3.0) * 3.0 * u_turbulence;
+  float lowerFilaments = abs(sin(wAngle * lowerBranches + radialPhase - timePhase + noisePhase));
+  float upperFilaments = abs(sin(wAngle * (lowerBranches + 1.0) + radialPhase - timePhase + noisePhase));
+  float filamentShape = mix(lowerFilaments, upperFilaments, branchBlend);
   float filaments = pow(1.0 - filamentShape, mix(14.0, 4.0, u_complexity));
   filaments *= smoothstep(1.48, 0.05, wRadius) * smoothstep(0.02, 0.16, wRadius);
 
@@ -99,8 +105,8 @@ void main() {
     float orbit = 0.18 + fract(seed * 0.37) * 0.72;
     float speed = mix(0.03, 0.13, u_turbulence);
     vec2 point = vec2(cos(seed + t * speed), sin(seed * 1.7 - t * speed * 0.8)) * orbit;
-    float active = smoothstep(fi / 7.0, fi / 7.0 + 0.22, u_complexity);
-    secondary += glow(length(w - point), 0.0014) * active * (1.0 - u_space * 0.72);
+    float activeWeight = smoothstep(fi / 7.0, fi / 7.0 + 0.22, u_complexity);
+    secondary += glow(length(w - point), 0.0014) * activeWeight * (1.0 - u_space * 0.72);
   }
 
   float inner = glow(wRadius, mix(0.008, 0.022, u_focus));

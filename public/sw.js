@@ -1,4 +1,4 @@
-const CACHE = 'stillness-shell-v1';
+const CACHE = 'stillness-shell-v2';
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -10,6 +10,16 @@ self.addEventListener('activate', (event) => {
     caches.keys()
       .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
       .then(() => self.clients.claim()),
+  );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'CACHE_URLS' || !Array.isArray(event.data.urls)) return;
+  const urls = event.data.urls.filter((url) => typeof url === 'string' && url.startsWith('/'));
+  event.waitUntil(
+    caches.open(CACHE).then((cache) =>
+      Promise.allSettled(urls.map((url) => cache.add(url))),
+    ),
   );
 });
 

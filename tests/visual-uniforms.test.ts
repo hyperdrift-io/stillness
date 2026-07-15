@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createUniformSnapshot } from '../src/visual/uniforms.ts';
+import { fragmentShaderSource } from '../src/visual/shaders.ts';
 import type { ResonanceState } from '../src/resonance/resonance.ts';
 
 const resonance: ResonanceState = {
@@ -39,4 +40,14 @@ test('createUniformSnapshot preserves valid dimensions and time', () => {
   assert.equal(uniforms.width, 1080);
   assert.equal(uniforms.height, 1920);
   assert.equal(uniforms.reducedMotion, 0);
+});
+
+test('fragment shader avoids reserved GLSL identifiers for local variables', () => {
+  assert.doesNotMatch(fragmentShaderSource, /float\s+active\b/);
+});
+
+test('fragment shader keeps polar filaments periodic across the angle branch cut', () => {
+  assert.match(fragmentShaderSource, /lowerBranches = floor\(branchLevel\)/);
+  assert.match(fragmentShaderSource, /lowerBranches \+ 1\.0/);
+  assert.doesNotMatch(fragmentShaderSource, /wAngle \* branches/);
 });
