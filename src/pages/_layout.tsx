@@ -19,12 +19,12 @@ export default async function RootLayout({ children }: RootLayoutProps) {
         property="og:description"
         content="Open. Be met. Let the noise disappear."
       />
-      <meta property="og:image" content="/icon.svg" />
+      <meta property="og:image" content="/icon-512.png" />
       <meta name="twitter:card" content="summary_large_image" />
       <link rel="canonical" href="/" />
       <link rel="icon" href="/icon.svg" type="image/svg+xml" />
       <link rel="manifest" href="/manifest.webmanifest" />
-      <link rel="apple-touch-icon" href="/icon.svg" />
+      <link rel="apple-touch-icon" href="/icon-192.png" />
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-title" content="Stillness" />
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
