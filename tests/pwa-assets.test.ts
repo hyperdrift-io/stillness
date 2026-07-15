@@ -55,3 +55,9 @@ test('public discovery and metadata assets are present', async () => {
   assert.match(layout, /og:title/);
   assert.match(rootElement, /<html lang="en">/);
 });
+
+test('development CSS is served with a stylesheet response', async () => {
+  const config = await read('waku.config.ts');
+  assert.match(config, /stillness-dev-css-direct/);
+  assert.match(config, /styles\.css\?direct/);
+});
