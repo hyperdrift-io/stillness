@@ -53,13 +53,18 @@
 
 @layer layout {
   main { min-block-size: 100svh; }
-  section.entry {
+  .experience {
     position: relative;
-    display: grid;
     min-block-size: 100svh;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  section.entry-panel {
+    position: absolute;
+    inset: 0;
+    display: grid;
     place-items: center;
     padding: var(--space-l);
-    isolation: isolate;
   }
 }
 
@@ -124,12 +129,108 @@
   }
   button.primary:hover { box-shadow: 0 0 2.5rem rgb(243 164 79 / 0.3); }
   button.primary:active { transform: scale(0.97); }
+  button.primary:disabled { cursor: wait; opacity: 0.72; }
+  .light-field {
+    position: absolute;
+    inset: 0;
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
+    background: var(--color-void);
+    opacity: 0;
+    transition: opacity var(--duration-enter) var(--ease-calm);
+  }
+  section.entry-panel {
+    opacity: 1;
+    visibility: visible;
+    transition:
+      opacity 700ms var(--ease-calm),
+      visibility 700ms allow-discrete;
+  }
+  details {
+    max-inline-size: 30rem;
+    color: var(--color-muted);
+    font-size: var(--text-small);
+  }
+  summary {
+    inline-size: fit-content;
+    margin-inline: auto;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: rgb(170 167 159 / 0.35);
+    text-underline-offset: 0.25em;
+  }
+  details p { margin-block: var(--space-s); line-height: 1.6; }
+  button.quiet {
+    min-block-size: 2.75rem;
+    padding-inline: var(--space-s);
+    color: var(--color-muted);
+    background: transparent;
+    text-decoration: underline;
+    text-decoration-color: rgb(170 167 159 / 0.35);
+    text-underline-offset: 0.25em;
+  }
+  p.system-message {
+    max-inline-size: 34rem;
+    color: var(--color-focus);
+    font-size: var(--text-small);
+    line-height: 1.5;
+  }
+  button.exit-session {
+    position: fixed;
+    inset-block-start: max(1rem, env(safe-area-inset-top));
+    inset-inline-end: max(1rem, env(safe-area-inset-right));
+    z-index: 4;
+    min-inline-size: 2.75rem;
+    padding: 0.5rem;
+    border: 1px solid rgb(255 255 255 / 0.18);
+    border-radius: 999px;
+    color: transparent;
+    background: rgb(3 4 7 / 0.2);
+    opacity: 0;
+    pointer-events: none;
+  }
+  button.exit-session::before,
+  button.exit-session::after {
+    content: "";
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-start: 50%;
+    inline-size: 0.9rem;
+    block-size: 1px;
+    background: rgb(243 238 229 / 0.65);
+  }
+  button.exit-session::before { transform: translate(-50%, -50%) rotate(45deg); }
+  button.exit-session::after { transform: translate(-50%, -50%) rotate(-45deg); }
+  button.exit-session:hover,
+  button.exit-session:focus-visible { opacity: 1; }
+  .visually-hidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
 }
 
 @layer states {
   @keyframes breathe {
     from { transform: scale(0.94) rotate(-2deg); opacity: 0.58; }
     to { transform: scale(1.05) rotate(2deg); opacity: 0.82; }
+  }
+  .experience[data-mode="active"] .light-field { opacity: 1; }
+  .experience[data-mode="active"] section.entry-panel {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .experience[data-mode="active"] button.exit-session {
+    opacity: 0.28;
+    pointer-events: auto;
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
