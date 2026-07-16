@@ -230,7 +230,12 @@ export class SessionController {
 
   setCameraEnabled(enabled: boolean): Promise<boolean> {
     this.cameraEnabled = enabled;
-    if (enabled) return this.dependencies.camera.start();
+    if (enabled) {
+      return this.dependencies.camera.start().then((started) => {
+        if (!this.running || !this.cameraEnabled) this.dependencies.camera.stop();
+        return started;
+      });
+    }
     this.dependencies.camera.stop();
     return Promise.resolve(true);
   }

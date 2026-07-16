@@ -252,6 +252,54 @@ test('camera preference releases a resource acquired after disabling', async () 
   assert.equal(calls.filter((call) => call === 'camera:stop').length, 2);
 });
 
+test('camera preference releases a pending toggle restart after disabling', async () => {
+  let startCount = 0;
+  let resolveRestart: (started: boolean) => void = () => {};
+  const restart = new Promise<boolean>((resolve) => {
+    resolveRestart = resolve;
+  });
+  const { controller, calls } = createHarness(1, {
+    cameraStart: () => {
+      startCount += 1;
+      return startCount === 1 ? Promise.resolve(true) : restart;
+    },
+  });
+  await controller.start();
+  await Promise.resolve();
+
+  const restoration = controller.setCameraEnabled(true);
+  await controller.setCameraEnabled(false);
+  assert.equal(calls.filter((call) => call === 'camera:stop').length, 1);
+  resolveRestart(true);
+
+  assert.equal(await restoration, true);
+  assert.equal(calls.filter((call) => call === 'camera:stop').length, 2);
+});
+
+test('SessionController releases a pending toggle restart after stopping', async () => {
+  let startCount = 0;
+  let resolveRestart: (started: boolean) => void = () => {};
+  const restart = new Promise<boolean>((resolve) => {
+    resolveRestart = resolve;
+  });
+  const { controller, calls } = createHarness(1, {
+    cameraStart: () => {
+      startCount += 1;
+      return startCount === 1 ? Promise.resolve(true) : restart;
+    },
+  });
+  await controller.start();
+  await Promise.resolve();
+
+  const restoration = controller.setCameraEnabled(true);
+  await controller.stop();
+  assert.equal(calls.filter((call) => call === 'camera:stop').length, 1);
+  resolveRestart(true);
+
+  assert.equal(await restoration, true);
+  assert.equal(calls.filter((call) => call === 'camera:stop').length, 2);
+});
+
 test('camera preference stays disabled across page visibility changes', async () => {
   const { controller, calls } = createHarness(1);
   await controller.start();
