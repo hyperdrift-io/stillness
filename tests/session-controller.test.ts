@@ -383,6 +383,56 @@ test('SessionController releases a pending toggle restart after stopping', async
   assert.equal(calls.filter((call) => call === 'camera:stop').length, 2);
 });
 
+test('SessionController releases a pending visibility restart after disabling camera', async () => {
+  let startCount = 0;
+  let resolveRestart: (started: boolean) => void = () => {};
+  const restart = new Promise<boolean>((resolve) => {
+    resolveRestart = resolve;
+  });
+  const { controller, calls } = createHarness(1, {
+    cameraStart: () => {
+      startCount += 1;
+      return startCount === 1 ? Promise.resolve(true) : restart;
+    },
+  });
+  await controller.start();
+  await controller.setHidden(true);
+  await controller.setHidden(false);
+
+  await controller.setCameraEnabled(false);
+  const stopsBeforeResolution = calls.filter((call) => call === 'camera:stop').length;
+  resolveRestart(true);
+  await restart;
+  await Promise.resolve();
+
+  assert.equal(calls.filter((call) => call === 'camera:stop').length, stopsBeforeResolution + 1);
+});
+
+test('SessionController releases a pending visibility restart after stopping', async () => {
+  let startCount = 0;
+  let resolveRestart: (started: boolean) => void = () => {};
+  const restart = new Promise<boolean>((resolve) => {
+    resolveRestart = resolve;
+  });
+  const { controller, calls } = createHarness(1, {
+    cameraStart: () => {
+      startCount += 1;
+      return startCount === 1 ? Promise.resolve(true) : restart;
+    },
+  });
+  await controller.start();
+  await controller.setHidden(true);
+  await controller.setHidden(false);
+
+  await controller.stop();
+  const stopsBeforeResolution = calls.filter((call) => call === 'camera:stop').length;
+  resolveRestart(true);
+  await restart;
+  await Promise.resolve();
+
+  assert.equal(calls.filter((call) => call === 'camera:stop').length, stopsBeforeResolution + 1);
+});
+
 test('camera preference stays disabled across page visibility changes', async () => {
   const { controller, calls } = createHarness(1);
   await controller.start();

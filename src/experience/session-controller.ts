@@ -127,7 +127,7 @@ export class SessionController {
     // These calls occur before the first await so browser permission and audio
     // policies see the original Begin gesture.
     const cameraPromise = this.cameraEnabled
-      ? this.dependencies.camera.start()
+      ? this.startCamera()
       : Promise.resolve(false);
     const motionPromise = this.dependencies.motion.start();
     const audioPromise = this.dependencies.audio.start();
@@ -135,9 +135,7 @@ export class SessionController {
     this.dependencies.renderer.start();
     this.frame = this.dependencies.requestFrame(this.onFrame);
 
-    void cameraPromise.then(() => {
-      if (!this.running || !this.cameraEnabled) this.dependencies.camera.stop();
-    }).catch(() => {});
+    void cameraPromise.catch(() => {});
     void motionPromise.then(() => {
       if (!this.running) this.dependencies.motion.stop();
     }).catch(() => {});
@@ -241,12 +239,7 @@ export class SessionController {
 
   setCameraEnabled(enabled: boolean): Promise<boolean> {
     this.cameraEnabled = enabled;
-    if (enabled) {
-      return this.dependencies.camera.start().then((started) => {
-        if (!this.running || !this.cameraEnabled) this.dependencies.camera.stop();
-        return started;
-      });
-    }
+    if (enabled) return this.startCamera();
     this.dependencies.camera.stop();
     this.cameraMotion.clear();
     return Promise.resolve(true);
@@ -266,7 +259,7 @@ export class SessionController {
     if (this.pausedAt === null) return;
     this.startTime += Math.max(0, this.dependencies.now() - this.pausedAt);
     this.pausedAt = null;
-    if (this.cameraEnabled) void this.dependencies.camera.start().catch(() => {});
+    if (this.cameraEnabled) void this.startCamera().catch(() => {});
     void this.dependencies.motion.start().catch(() => {});
     if (this.audioAvailable) await this.dependencies.audio.resume().catch(() => {});
     this.frame = this.dependencies.requestFrame(this.onFrame);
@@ -290,6 +283,15 @@ export class SessionController {
         // Resource cleanup and returning control to the user take precedence.
       });
     }
+  }
+
+  private startCamera(): Promise<boolean> {
+    return this.dependencies.camera.start().then((started) => {
+      if (!this.running || !this.cameraEnabled || this.pausedAt !== null) {
+        this.dependencies.camera.stop();
+      }
+      return started;
+    });
   }
 
   private onFrame = (timestamp: number): void => {
