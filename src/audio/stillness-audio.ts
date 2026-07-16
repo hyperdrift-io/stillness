@@ -10,6 +10,12 @@ export type AudioParameters = {
   delayMix: number;
 };
 
+const SILENT_GAIN = 0.0001;
+
+export function audibleGainTarget(audible: boolean, adaptiveGain: number): number {
+  return audible && Number.isFinite(adaptiveGain) ? adaptiveGain : SILENT_GAIN;
+}
+
 export function mapAudioParameters(state: ResonanceState): AudioParameters {
   const energy = clamp01(state.audioEnergy);
   const turbulence = clamp01(state.turbulence);
@@ -37,6 +43,8 @@ export class StillnessAudio {
   private pulseGain: GainNode | null = null;
   private pulseOscillator: OscillatorNode | null = null;
   private sources: AudioScheduledSourceNode[] = [];
+  private adaptiveMasterGain = 0.08;
+  private audible = true;
 
   async start(): Promise<void> {
     if (this.context) {
@@ -54,7 +62,7 @@ export class StillnessAudio {
     const delayFeedback = context.createGain();
     const pulseGain = context.createGain();
 
-    master.gain.value = 0.0001;
+    master.gain.value = SILENT_GAIN;
     droneGain.gain.value = 0.06;
     textureGain.gain.value = 0.025;
     filter.type = 'lowpass';
@@ -113,7 +121,10 @@ export class StillnessAudio {
     this.pulseOscillator = pulseOscillator;
     this.sources = [...oscillators, noise, pulseOscillator];
 
-    master.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 1.8);
+    master.gain.exponentialRampToValueAtTime(
+      audibleGainTarget(this.audible, this.adaptiveMasterGain),
+      context.currentTime + 1.8,
+    );
     if (context.state === 'suspended') await context.resume();
   }
 
@@ -121,8 +132,14 @@ export class StillnessAudio {
     const context = this.context;
     if (!context) return;
     const parameters = mapAudioParameters(state);
+    this.adaptiveMasterGain = parameters.masterGain;
     const now = context.currentTime;
-    this.setTarget(this.master?.gain, parameters.masterGain, now, 1.2);
+    this.setTarget(
+      this.master?.gain,
+      audibleGainTarget(this.audible, this.adaptiveMasterGain),
+      now,
+      1.2,
+    );
     this.setTarget(this.droneGain?.gain, parameters.droneGain, now, 1.5);
     this.setTarget(this.textureGain?.gain, parameters.textureGain, now, 1.8);
     this.setTarget(this.filter?.frequency, parameters.filterHz, now, 2.2);
@@ -130,6 +147,28 @@ export class StillnessAudio {
     this.setTarget(this.delayFeedback?.gain, 0.16 + parameters.delayMix * 0.42, now, 2.5);
     this.setTarget(this.pulseOscillator?.frequency, parameters.pulseHz, now, 2.2);
     this.setTarget(this.pulseGain?.gain, 0.002 + parameters.masterGain * 0.065, now, 1.8);
+  }
+
+  async setAudible(audible: boolean): Promise<boolean> {
+    const context = this.context;
+    const master = this.master;
+    if (!context || !master) return false;
+
+    if (audible && context.state === 'suspended') await context.resume();
+    if (this.audible === audible) return true;
+    this.audible = audible;
+    const now = context.currentTime;
+    master.gain.cancelScheduledValues(now);
+    master.gain.setTargetAtTime(
+      audibleGainTarget(audible, this.adaptiveMasterGain),
+      now,
+      0.08,
+    );
+    return true;
+  }
+
+  isAvailable(): boolean {
+    return this.context !== null;
   }
 
   async suspend(): Promise<void> {
@@ -145,7 +184,7 @@ export class StillnessAudio {
     if (!context) return;
     const now = context.currentTime;
     this.master?.gain.cancelScheduledValues(now);
-    if (context.state === 'running') this.master?.gain.setTargetAtTime(0.0001, now, 0.02);
+    if (context.state === 'running') this.master?.gain.setTargetAtTime(SILENT_GAIN, now, 0.02);
     for (const source of this.sources) {
       try {
         source.stop(context.state === 'running' ? now + 0.08 : now);

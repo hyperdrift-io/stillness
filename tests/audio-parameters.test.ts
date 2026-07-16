@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mapAudioParameters } from '../src/audio/stillness-audio.ts';
+import { audibleGainTarget, mapAudioParameters } from '../src/audio/stillness-audio.ts';
 import type { ResonanceState } from '../src/resonance/resonance.ts';
 
 const active: ResonanceState = {
@@ -46,4 +46,10 @@ test('settling removes texture and slows the shared pulse', () => {
   assert.ok(ending.filterHz < beginning.filterHz);
   assert.ok(ending.pulseHz < beginning.pulseHz);
   assert.ok(ending.delayMix > beginning.delayMix);
+});
+
+test('audible gain target fades to silence without reaching digital zero', () => {
+  assert.equal(audibleGainTarget(false, 0.12), 0.0001);
+  assert.equal(audibleGainTarget(true, 0.12), 0.12);
+  assert.equal(audibleGainTarget(true, Number.NaN), 0.0001);
 });

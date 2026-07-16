@@ -16,6 +16,7 @@ type RendererPort = {
 type AudioPort = {
   start: () => Promise<void>;
   update: (state: ResonanceState, elapsedSeconds: number) => void;
+  setAudible: (audible: boolean) => Promise<boolean>;
   suspend: () => Promise<void>;
   resume: () => Promise<void>;
   dispose: () => void;
@@ -243,6 +244,11 @@ export class SessionController {
     this.dependencies.camera.stop();
     this.cameraMotion.clear();
     return Promise.resolve(true);
+  }
+
+  async setSoundEnabled(enabled: boolean): Promise<boolean> {
+    if (!this.audioAvailable) return false;
+    return this.dependencies.audio.setAudible(enabled).catch(() => false);
   }
 
   async setHidden(hidden: boolean): Promise<void> {

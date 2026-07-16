@@ -12,6 +12,7 @@ import type { PersonalBaseline } from '../src/state/baseline-store.ts';
 
 type HarnessOptions = {
   now?: () => number;
+  soundEnabledResult?: boolean;
   cameraStartResult?: boolean;
   cameraStart?: () => Promise<boolean>;
   cameraRead?: SessionDependencies['camera']['read'];
@@ -40,6 +41,10 @@ function createHarness(observationConfidence = 0, options: HarnessOptions = {}):
     audio: {
       start: async () => { calls.push('audio:start'); },
       update: () => calls.push('audio:update'),
+      setAudible: async (audible) => {
+        calls.push(`audio:audible:${audible}`);
+        return options.soundEnabledResult ?? true;
+      },
       suspend: async () => { calls.push('audio:suspend'); },
       resume: async () => { calls.push('audio:resume'); },
       dispose: () => calls.push('audio:dispose'),
@@ -150,6 +155,13 @@ test('SessionController suspends, resumes, and disposes every resource', async (
   assert.ok(calls.includes('camera:stop'));
   assert.ok(calls.includes('motion:stop'));
   assert.ok(calls.includes('frame:cancel'));
+});
+
+test('SessionController forwards sound preference and returns audio availability', async () => {
+  const { controller, calls } = createHarness(0, { soundEnabledResult: false });
+
+  assert.equal(await controller.setSoundEnabled(false), false);
+  assert.ok(calls.includes('audio:audible:false'));
 });
 
 test('SessionController excludes hidden time and restarts sensing when visible', async () => {
