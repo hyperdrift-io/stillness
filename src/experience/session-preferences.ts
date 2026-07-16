@@ -1,4 +1,7 @@
+export type SessionMode = 'mirror' | 'pure';
+
 export type SessionPreferences = {
+  mode: SessionMode;
   guidance: boolean;
   sound: boolean;
   liveSignals: boolean;
@@ -6,6 +9,7 @@ export type SessionPreferences = {
 };
 
 export const defaultSessionPreferences: SessionPreferences = Object.freeze({
+  mode: 'mirror',
   guidance: true,
   sound: true,
   liveSignals: false,

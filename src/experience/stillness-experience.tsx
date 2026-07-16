@@ -27,7 +27,7 @@ const initialTelemetry: SessionTelemetry = {
   presence: 0,
   sensingQuality: 0,
   expressionActivity: 0,
-  softness: 0.5,
+  softness: 0,
   turbulence: 0,
   settling: 0,
   relief: 0,
@@ -86,6 +86,8 @@ export function StillnessExperience() {
     preference: keyof SessionPreferences,
     enabled: boolean,
   ) => {
+    if (preference === 'mode') return;
+
     setPreferences((current) => ({ ...current, [preference]: enabled }));
     trackEvent('session_preference_changed', { preference, enabled });
 
@@ -235,7 +237,8 @@ export function StillnessExperience() {
         setAudioAvailable(available);
         setMode('active');
         trackEvent('session_started', {
-          mode: preferences.guidance ? 'guided' : 'pure',
+          mode: preferences.mode,
+          guidance: preferences.guidance,
           sound: preferences.sound,
           camera: preferences.camera,
         });
@@ -274,12 +277,41 @@ export function StillnessExperience() {
       >
         <div className="entry-presence" aria-hidden="true" />
         <div className="entry-copy">
-          <p className="eyebrow">Stillness</p>
-          <h1 id="stillness-title">Let the noise disappear.</h1>
+          <p className="eyebrow">Relief</p>
+          <h1 id="stillness-title">Reset now. Return stronger.</h1>
           <p>
-            Camera and motion sensing meet your present rhythm while everything stays
-            private on this device.
+            A private soul mirror responds to presence, movement, and expression signals
+            so you can recover your center and rebuild readiness.
           </p>
+          <fieldset className="entry-options">
+            <legend>Begin with</legend>
+            <label className="mode-choice">
+              <input
+                type="radio"
+                name="session-mode"
+                checked={preferences.mode === 'mirror'}
+                onChange={() => setPreferences((current) => ({
+                  ...current,
+                  mode: 'mirror',
+                  camera: true,
+                }))}
+              />
+              <span>Mirror</span>
+            </label>
+            <label className="mode-choice">
+              <input
+                type="radio"
+                name="session-mode"
+                checked={preferences.mode === 'pure'}
+                onChange={() => setPreferences((current) => ({
+                  ...current,
+                  mode: 'pure',
+                  camera: false,
+                }))}
+              />
+              <span>Pure</span>
+            </label>
+          </fieldset>
           <label className="mode-choice">
             <input
               type="checkbox"
@@ -289,10 +321,21 @@ export function StillnessExperience() {
                 guidance: event.currentTarget.checked,
               }))}
             />
-            <span>Guide me into stillness</span>
+            <span>Guide me</span>
+          </label>
+          <label className="mode-choice">
+            <input
+              type="checkbox"
+              checked={preferences.sound}
+              onChange={(event) => setPreferences((current) => ({
+                ...current,
+                sound: event.currentTarget.checked,
+              }))}
+            />
+            <span>Soothing sound</span>
           </label>
           <p className="mode-note">
-            Turn guidance off for an uninterrupted Pure session.
+            Mirror uses local camera analysis. Pure keeps the same reset without camera.
           </p>
           <button
             className="primary"
