@@ -26,6 +26,13 @@ const initialTelemetry: SessionTelemetry = {
   steadiness: 0,
   presence: 0,
   sensingQuality: 0,
+  expressionActivity: 0,
+  softness: 0,
+  turbulence: 0,
+  settling: 0,
+  relief: 0,
+  readiness: 0,
+  confidence: 0,
   direction: 'holding',
   source: 'scripted',
 };

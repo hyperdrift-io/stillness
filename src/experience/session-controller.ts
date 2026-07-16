@@ -5,7 +5,7 @@ import { FeatureWindow } from '../sensing/feature-window.ts';
 import type { CameraObservation } from '../sensing/camera-sensor.ts';
 import type { MotionObservation } from '../sensing/motion-sensor.ts';
 import type { PersonalBaseline } from '../state/baseline-store.ts';
-import { estimateState } from '../state/state-estimator.ts';
+import { estimateReliefState } from '../state/state-estimator.ts';
 
 type RendererPort = {
   start: () => void;
@@ -48,8 +48,15 @@ export type SessionTelemetry = {
   steadiness: number;
   presence: number;
   sensingQuality: number;
+  expressionActivity: number;
+  softness: number;
+  turbulence: number;
+  settling: number;
+  relief: number;
+  readiness: number;
+  confidence: number;
   direction: 'settling' | 'holding' | 'rising';
-  source: 'sensed' | 'scripted';
+  source: 'mirror' | 'pure' | 'scripted';
 };
 
 export type SessionDependencies = {
@@ -162,17 +169,21 @@ export class SessionController {
     this.deviceMotion.push(motion.motion, now);
     const cameraWindow = this.cameraMotion.snapshot();
     const motionWindow = this.deviceMotion.snapshot();
+    const elapsedProgress = smoothProgress(this.elapsedMs);
 
     this.sensorConfidence = clamp01(
       1 - (1 - camera.confidence * 0.75) * (1 - motion.confidence * 0.25),
     );
-    const measured = estimateState({
+    const measured = estimateReliefState({
       cameraMotion: cameraWindow.mean,
       cameraPresence: camera.presence,
       deviceMotion: motionWindow.mean,
       variability: clamp01(Math.sqrt(cameraWindow.variance + motionWindow.variance)),
       settlingTrend: Math.max(-1, Math.min(1, -(cameraWindow.slopePerSecond + motionWindow.slopePerSecond) * 4)),
+      expressionActivity: 0,
+      softness: 0,
       confidence: this.sensorConfidence,
+      elapsedProgress,
     });
     const calibrated = this.personalBaseline
       ? {
@@ -193,20 +204,34 @@ export class SessionController {
             steadiness: scripted.stability,
             presence: scripted.presence,
             sensingQuality: this.sensorConfidence,
+            expressionActivity: 0,
+            softness: 0,
+            turbulence: 1 - scripted.stability,
+            settling: scripted.stability,
+            relief: elapsedProgress,
+            readiness: clamp01(elapsedProgress - 0.25),
+            confidence: this.sensorConfidence,
             direction: 'holding',
             source: 'scripted',
           }
         : {
-            movement: clamp01(cameraWindow.mean * 0.68 + motionWindow.mean * 0.32),
+            movement: measured.motion,
             steadiness: clamp01(calibrated.stability),
             presence: clamp01(calibrated.presence),
             sensingQuality: this.sensorConfidence,
+            expressionActivity: measured.expressionActivity,
+            softness: measured.softness,
+            turbulence: measured.turbulence,
+            settling: measured.settling,
+            relief: measured.relief,
+            readiness: measured.readiness,
+            confidence: this.sensorConfidence,
             direction: calibrated.trend > 0.08
               ? 'settling'
               : calibrated.trend < -0.08
                 ? 'rising'
                 : 'holding',
-            source: 'sensed',
+            source: 'pure',
           };
       this.dependencies.onTelemetry?.(telemetry);
       this.lastTelemetryAt = now;
