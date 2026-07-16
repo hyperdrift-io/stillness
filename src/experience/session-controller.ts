@@ -93,6 +93,20 @@ function smoothProgress(elapsedMs: number): number {
   return linear * linear * (3 - 2 * linear);
 }
 
+function hasMirrorEvidence(mirror: MirrorSignal): boolean {
+  return mirror.mode === 'mirror'
+    && (
+      mirror.confidence > 0
+      || mirror.presence > 0
+      || mirror.motion > 0
+      || mirror.luminance > 0
+    );
+}
+
+function hasSoftnessEvidence(mirror: MirrorSignal): boolean {
+  return mirror.topology !== null || mirror.expressionActivity > 0;
+}
+
 export function scriptedStateForElapsed(elapsedMs: number): StateEstimate {
   const progress = smoothProgress(elapsedMs);
   return {
@@ -176,6 +190,8 @@ export class SessionController {
     const cameraWindow = this.cameraMotion.snapshot();
     const motionWindow = this.deviceMotion.snapshot();
     const elapsedProgress = smoothProgress(this.elapsedMs);
+    const softness = hasSoftnessEvidence(mirror) ? mirror.softness : 0.5;
+    const telemetrySource: SessionTelemetry['source'] = hasMirrorEvidence(mirror) ? 'mirror' : 'pure';
 
     this.sensorConfidence = clamp01(
       1 - (1 - mirror.confidence * 0.82) * (1 - motion.confidence * 0.18),
@@ -187,7 +203,7 @@ export class SessionController {
       variability: clamp01(Math.sqrt(cameraWindow.variance + motionWindow.variance)),
       settlingTrend: Math.max(-1, Math.min(1, -(cameraWindow.slopePerSecond + motionWindow.slopePerSecond) * 4)),
       expressionActivity: mirror.expressionActivity,
-      softness: mirror.softness,
+      softness,
       confidence: this.sensorConfidence,
       elapsedProgress,
     });
@@ -211,7 +227,7 @@ export class SessionController {
             presence: scripted.presence,
             sensingQuality: this.sensorConfidence,
             expressionActivity: 0,
-            softness: 0,
+            softness: 0.5,
             turbulence: 1 - scripted.stability,
             settling: scripted.stability,
             relief: elapsedProgress,
@@ -237,7 +253,7 @@ export class SessionController {
               : calibrated.trend < -0.08
                 ? 'rising'
                 : 'holding',
-            source: mirror.mode === 'mirror' && mirror.topology ? 'mirror' : 'pure',
+            source: telemetrySource,
           };
       this.dependencies.onTelemetry?.(telemetry);
       this.lastTelemetryAt = now;
