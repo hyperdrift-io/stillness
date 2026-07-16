@@ -179,9 +179,9 @@ if (now - this.lastTelemetryAt >= 250 || this.lastTelemetryAt === -Infinity) {
 }
 ```
 
-Reset the throttle on `start()`. Reuse `CameraPort.start/stop` and delegate audio toggling through the audio port. Disabling camera must call `stop()` synchronously; enabling returns the result of `start()` without changing the running state.
+Reset the throttle on `start()`. Reuse `CameraPort.start/stop`. Disabling camera must call `stop()` synchronously; enabling returns the result of `start()` without changing the running state.
 
-- [ ] **Step 4: Add camera and sound toggle tests**
+- [ ] **Step 4: Add camera toggle tests**
 
 ```ts
 test('camera preference releases and restores its resource', async () => {
