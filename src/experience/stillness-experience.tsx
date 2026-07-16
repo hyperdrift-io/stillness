@@ -11,6 +11,7 @@ import { GuidancePolicy, type GuidanceCue } from './guidance-policy.ts';
 import { SessionController, type SessionTelemetry } from './session-controller.ts';
 import { SessionGuidance } from './session-guidance.tsx';
 import { SessionMenu } from './session-menu.tsx';
+import { SessionTransitions, type SessionToken } from './session-transitions.ts';
 import {
   commandForKey,
   defaultSessionPreferences,
@@ -37,6 +38,8 @@ export function StillnessExperience() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const controllerRef = useRef<SessionController | null>(null);
+  const controllerTokenRef = useRef<SessionToken | null>(null);
+  const transitionsRef = useRef(new SessionTransitions());
   const guidancePolicyRef = useRef(new GuidancePolicy());
   const baselineRef = useRef(new BaselineStore());
   const [mode, setMode] = useState<ExperienceMode>('ready');
@@ -49,12 +52,16 @@ export function StillnessExperience() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [audioAvailable, setAudioAvailable] = useState(true);
 
-  const leave = useCallback(async () => {
+  const leave = useCallback((): Promise<void> => {
     const controller = controllerRef.current;
-    controllerRef.current = null;
-    try {
-      if (controller) await controller.stop();
-    } finally {
+    const token = controllerTokenRef.current;
+    if (controller === null || token === null) return Promise.resolve();
+
+    return transitionsRef.current.leave(token, () => controller.stop(), () => {
+      if (controllerTokenRef.current === token) {
+        controllerRef.current = null;
+        controllerTokenRef.current = null;
+      }
       guidancePolicyRef.current.reset();
       setTelemetry(initialTelemetry);
       setCue(null);
@@ -62,7 +69,7 @@ export function StillnessExperience() {
       setAudioAvailable(true);
       setMode('ready');
       setMessage('');
-    }
+    });
   }, []);
 
   const togglePreference = useCallback((
@@ -72,8 +79,12 @@ export function StillnessExperience() {
     setPreferences((current) => ({ ...current, [preference]: enabled }));
 
     if (preference === 'sound') {
-      void controllerRef.current?.setSoundEnabled(enabled).then((available) => {
-        setAudioAvailable(available);
+      const controller = controllerRef.current;
+      const token = controllerTokenRef.current;
+      void controller?.setSoundEnabled(enabled).then((available) => {
+        if (token !== null && transitionsRef.current.owns(token)) {
+          setAudioAvailable(available);
+        }
       });
     } else if (preference === 'camera') {
       void controllerRef.current?.setCameraEnabled(enabled);
@@ -102,8 +113,12 @@ export function StillnessExperience() {
       });
     }
     return () => {
-      void controllerRef.current?.stop();
+      const controller = controllerRef.current;
+      const token = controllerTokenRef.current;
+      if (token !== null) transitionsRef.current.invalidate(token);
       controllerRef.current = null;
+      controllerTokenRef.current = null;
+      void controller?.stop();
     };
   }, []);
 
@@ -163,7 +178,10 @@ export function StillnessExperience() {
 
   async function begin(): Promise<void> {
     const canvas = canvasRef.current;
-    if (!canvas || mode === 'starting' || mode === 'active') return;
+    if (!canvas) return;
+    const token = transitionsRef.current.begin();
+    if (token === null) return;
+
     setMode('starting');
     setMessage('');
     guidancePolicyRef.current.reset();
@@ -172,35 +190,50 @@ export function StillnessExperience() {
     setMenuOpen(false);
     setAudioAvailable(true);
 
-    const controller = new SessionController({
-      renderer: new LightFieldRenderer(canvas),
-      audio: new StillnessAudio(),
-      camera: new CameraSensor(),
-      motion: new MotionSensor(),
-      baseline: baselineRef.current,
-      now: () => performance.now(),
-      requestFrame: (callback) => requestAnimationFrame(callback),
-      cancelFrame: (handle) => cancelAnimationFrame(handle),
-      onTelemetry: (nextTelemetry) => {
-        setTelemetry(nextTelemetry);
-        setCue(guidancePolicyRef.current.evaluate(
-          nextTelemetry,
-          controller.snapshot().elapsedMs,
-        ));
-      },
-    });
-    controllerRef.current = controller;
-
+    let controller: SessionController | null = null;
     try {
+      controller = new SessionController({
+        renderer: new LightFieldRenderer(canvas),
+        audio: new StillnessAudio(),
+        camera: new CameraSensor(),
+        motion: new MotionSensor(),
+        baseline: baselineRef.current,
+        now: () => performance.now(),
+        requestFrame: (callback) => requestAnimationFrame(callback),
+        cancelFrame: (handle) => cancelAnimationFrame(handle),
+        onTelemetry: (nextTelemetry) => {
+          if (!transitionsRef.current.owns(token) || controller === null) return;
+          setTelemetry(nextTelemetry);
+          setCue(guidancePolicyRef.current.evaluate(
+            nextTelemetry,
+            controller.snapshot().elapsedMs,
+          ));
+        },
+      });
+      controllerRef.current = controller;
+      controllerTokenRef.current = token;
+
       if (!preferences.camera) void controller.setCameraEnabled(false);
       await controller.start();
-      setAudioAvailable(await controller.setSoundEnabled(preferences.sound));
-      setMode('active');
+      if (!transitionsRef.current.owns(token)) {
+        await controller.stop();
+        return;
+      }
+      const available = await controller.setSoundEnabled(preferences.sound);
+      transitionsRef.current.activate(token, () => {
+        setAudioAvailable(available);
+        setMode('active');
+      });
     } catch {
-      await controller.stop();
-      controllerRef.current = null;
-      setMessage('This browser could not create the light field. A current browser with WebGL2 can open it.');
-      setMode('error');
+      await controller?.stop();
+      transitionsRef.current.fail(token, () => {
+        if (controllerTokenRef.current === token) {
+          controllerRef.current = null;
+          controllerTokenRef.current = null;
+        }
+        setMessage('This browser could not create the light field. A current browser with WebGL2 can open it.');
+        setMode('error');
+      });
     }
   }
 
@@ -260,8 +293,12 @@ export function StillnessExperience() {
           <details>
             <summary>Privacy</summary>
             <p>
-              Frames and motion samples are processed in memory. Nothing is recorded or
-              sent away. Only aggregate calibration remains on this device.
+              Camera, audio, and motion signals are processed only in memory on this device,
+              then discarded. Nothing is saved or sent.
+            </p>
+            <p>
+              A bounded aggregate calibration can remain on this device to help future
+              sessions adapt.
             </p>
             <button className="quiet" type="button" onClick={() => void clearCalibration()}>
               Clear local calibration

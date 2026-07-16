@@ -15,6 +15,15 @@ test('landing explains sensing, modes, sound, and session adjustment', async () 
   assert.match(source, /Press.*\?.*anytime/s);
 });
 
+test('landing states the exact signal privacy boundary before local aggregate calibration', async () => {
+  const source = await read('src/experience/stillness-experience.tsx');
+
+  assert.match(
+    source,
+    /Camera, audio, and motion signals are processed only in memory on this device,\s*then discarded\. Nothing is saved or sent\.\s*<\/p>\s*<p>\s*A bounded aggregate calibration can remain on this device/,
+  );
+});
+
 test('active experience renders guidance, menu, and a touch menu trigger', async () => {
   const source = await read('src/experience/stillness-experience.tsx');
 
@@ -36,6 +45,18 @@ test('begin wires telemetry and applies camera and sound preferences in gesture-
   assert.doesNotMatch(source, /setCameraEnabled\(true\)[\s\S]*controller\.start\(\)/);
 });
 
+test('experience delegates synchronous guards and async UI ownership to session transitions', async () => {
+  const source = await read('src/experience/stillness-experience.tsx');
+
+  assert.match(source, /import \{ SessionTransitions, type SessionToken \}/);
+  assert.match(source, /useRef\(new SessionTransitions\(\)\)/);
+  assert.match(source, /const token = transitionsRef\.current\.begin\(\)/);
+  assert.match(source, /transitionsRef\.current\.owns\(token\)/);
+  assert.match(source, /transitionsRef\.current\.activate\(token,/);
+  assert.match(source, /transitionsRef\.current\.fail\(token,/);
+  assert.match(source, /transitionsRef\.current\.leave\(token,/);
+});
+
 test('shortcuts ignore editable targets and non-shift modifiers while escape closes before leaving', async () => {
   const source = await read('src/experience/stillness-experience.tsx');
 
@@ -49,7 +70,8 @@ test('shortcuts ignore editable targets and non-shift modifiers while escape clo
 test('live controls update preferences, resources, and guidance visibility', async () => {
   const source = await read('src/experience/stillness-experience.tsx');
 
-  assert.match(source, /controllerRef\.current\?\.setSoundEnabled\(enabled\)/);
+  assert.match(source, /controller\?\.setSoundEnabled\(enabled\)/);
+  assert.match(source, /transitionsRef\.current\.owns\(token\)[\s\S]*setAudioAvailable\(available\)/);
   assert.match(source, /controllerRef\.current\?\.setCameraEnabled\(enabled\)/);
   assert.match(source, /guidancePolicyRef\.current\.reset\(\)/);
   assert.match(source, /setCue\(null\)/);
@@ -67,7 +89,9 @@ test('the signals shortcut reveals the menu when closed', async () => {
 
 test('active presentation keeps the menu mounted and resets only session-visible state on leave', async () => {
   const source = await read('src/experience/stillness-experience.tsx');
-  const leaveBody = source.match(/const leave = useCallback\(async \(\) => \{([\s\S]*?)\n  \}, \[/)?.[1];
+  const leaveBody = source.match(
+    /const leave = useCallback\(\(\): Promise<void> => \{([\s\S]*?)\n  \}, \[/,
+  )?.[1];
 
   assert.ok(leaveBody);
   assert.match(leaveBody, /guidancePolicyRef\.current\.reset\(\)/);
