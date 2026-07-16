@@ -2,14 +2,11 @@
 
 An installable, privacy-first audiovisual experience that meets the mind at its current velocity and progressively descends toward stillness.
 
-## Run locally
+## Production
 
-```bash
-pnpm install
-pnpm dev
-```
+The prototype is evaluated at [stillness.hyperdrift.io](https://stillness.hyperdrift.io).
 
-Open the local HTTPS or localhost URL. A single **Begin** gesture unlocks browser audio and, when available, on-device sensing. The experience remains complete when camera or motion access is unavailable.
+A single **Begin** gesture unlocks browser audio and, when available, on-device sensing. The experience remains complete when camera or motion access is unavailable.
 
 ## Session controls
 
@@ -21,12 +18,11 @@ During a session: `?` menu, `G` guidance, `M` sound, `D` live signals,
 
 Camera and motion observations are processed on device. Raw frames and samples are never stored or transmitted. Local calibration contains aggregate session summaries only and can be cleared from the entry screen.
 
-## Verify
+## Deploy-safety checks
 
 ```bash
-pnpm test
 pnpm run type-check
-pnpm run test:browser
+pnpm run build
 ```
 
-The browser smoke gate uses an installed Chrome without adding a browser automation dependency. It verifies WebGL startup, camera fallback-safe cleanup, reduced motion, and an offline reload after first use.
+Stillness is a prototype in discovery. Product feedback comes from the canonical production URL; automated test investment begins only when the direction is explicitly promoted to hardening.

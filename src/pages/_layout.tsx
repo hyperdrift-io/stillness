@@ -19,9 +19,13 @@ export default async function RootLayout({ children }: RootLayoutProps) {
         property="og:description"
         content="Open. Be met. Let the noise disappear."
       />
-      <meta property="og:image" content="/icon-512.png" />
+      <meta property="og:url" content="https://stillness.hyperdrift.io/" />
+      <meta property="og:image" content="https://stillness.hyperdrift.io/icon-512.png" />
       <meta name="twitter:card" content="summary_large_image" />
-      <link rel="canonical" href="/" />
+      <meta name="twitter:title" content="Stillness" />
+      <meta name="twitter:description" content="Open. Be met. Let the noise disappear." />
+      <meta name="twitter:image" content="https://stillness.hyperdrift.io/icon-512.png" />
+      <link rel="canonical" href="https://stillness.hyperdrift.io/" />
       <link rel="icon" href="/icon.svg" type="image/svg+xml" />
       <link rel="manifest" href="/manifest.webmanifest" />
       <link rel="apple-touch-icon" href="/icon-192.png" />

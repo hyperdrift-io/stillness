@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { trackEvent } from '../analytics/events.ts';
 import { StillnessAudio } from '../audio/stillness-audio.ts';
 import { CameraSensor } from '../sensing/camera-sensor.ts';
 import { MotionSensor } from '../sensing/motion-sensor.ts';
@@ -57,6 +58,7 @@ export function StillnessExperience() {
     const token = controllerTokenRef.current;
     if (controller === null || token === null) return Promise.resolve();
 
+    const elapsedSeconds = Math.round(controller.snapshot().elapsedMs / 1_000);
     return transitionsRef.current.leave(token, () => controller.stop(), () => {
       if (controllerTokenRef.current === token) {
         controllerRef.current = null;
@@ -69,6 +71,7 @@ export function StillnessExperience() {
       setAudioAvailable(true);
       setMode('ready');
       setMessage('');
+      trackEvent('session_ended', { elapsed_seconds: elapsedSeconds });
     });
   }, []);
 
@@ -77,6 +80,7 @@ export function StillnessExperience() {
     enabled: boolean,
   ) => {
     setPreferences((current) => ({ ...current, [preference]: enabled }));
+    trackEvent('session_preference_changed', { preference, enabled });
 
     if (preference === 'sound') {
       const controller = controllerRef.current;
@@ -223,6 +227,11 @@ export function StillnessExperience() {
       transitionsRef.current.activate(token, () => {
         setAudioAvailable(available);
         setMode('active');
+        trackEvent('session_started', {
+          mode: preferences.guidance ? 'guided' : 'pure',
+          sound: preferences.sound,
+          camera: preferences.camera,
+        });
       });
     } catch {
       await controller?.stop();

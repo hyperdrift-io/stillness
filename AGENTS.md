@@ -26,8 +26,10 @@ Create an adaptive audiovisual presence that meets the user at their current vel
 
 ```bash
 pnpm dev
-pnpm test
 pnpm run type-check
 pnpm run build
-pnpm run test:browser
 ```
+
+## Prototype loop
+
+Stillness remains in discovery until the user explicitly promotes it to hardening. Do not add, expand, or run automated test suites by default. Make the smallest coherent change, run fast deploy-safety checks, deploy to `https://stillness.hyperdrift.io`, then pause for user feedback before choosing another significant product change.
