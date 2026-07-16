@@ -160,15 +160,10 @@ export class StillnessAudio {
     if (audible && context.state === 'suspended') await context.resume();
     if (this.audible === audible) return true;
     this.audible = audible;
-    const now = context.currentTime;
-    if (typeof master.gain.cancelAndHoldAtTime === 'function') {
-      master.gain.cancelAndHoldAtTime(now);
-    } else {
-      master.gain.cancelScheduledValues(now);
-    }
-    master.gain.setTargetAtTime(
+    this.holdAndTarget(
+      master.gain,
       audibleGainTarget(audible, this.adaptiveMasterGain),
-      now,
+      context.currentTime,
       0.08,
     );
     return true;
@@ -190,8 +185,7 @@ export class StillnessAudio {
     const context = this.context;
     if (!context) return;
     const now = context.currentTime;
-    this.master?.gain.cancelScheduledValues(now);
-    if (context.state === 'running') this.master?.gain.setTargetAtTime(SILENT_GAIN, now, 0.02);
+    if (context.state === 'running') this.holdAndTarget(this.master?.gain, SILENT_GAIN, now, 0.02);
     for (const source of this.sources) {
       try {
         source.stop(context.state === 'running' ? now + 0.08 : now);
@@ -241,6 +235,23 @@ export class StillnessAudio {
   ): void {
     if (!parameter || !Number.isFinite(value)) return;
     parameter.cancelScheduledValues(now);
+    parameter.setTargetAtTime(value, now, timeConstant);
+  }
+
+  private holdAndTarget(
+    parameter: AudioParam | undefined,
+    value: number,
+    now: number,
+    timeConstant: number,
+  ): void {
+    if (!parameter || !Number.isFinite(value)) return;
+    if (typeof parameter.cancelAndHoldAtTime === 'function') {
+      parameter.cancelAndHoldAtTime(now);
+    } else {
+      const heldValue = parameter.value;
+      parameter.cancelScheduledValues(now);
+      parameter.setValueAtTime(heldValue, now);
+    }
     parameter.setTargetAtTime(value, now, timeConstant);
   }
 }

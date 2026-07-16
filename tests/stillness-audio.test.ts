@@ -7,6 +7,7 @@ import type { ResonanceState } from '../src/resonance/resonance.ts';
 type ParamEvent =
   | { type: 'cancel' | 'hold'; time: number }
   | { type: 'ramp'; value: number; time: number }
+  | { type: 'set'; value: number; time: number }
   | { type: 'target'; value: number; time: number; timeConstant: number };
 
 class FakeAudioParam {
@@ -30,6 +31,12 @@ class FakeAudioParam {
 
   exponentialRampToValueAtTime(value: number, time: number): FakeAudioParam {
     this.events.push({ type: 'ramp', value, time });
+    return this;
+  }
+
+  setValueAtTime(value: number, time: number): FakeAudioParam {
+    this.value = value;
+    this.events.push({ type: 'set', value, time });
     return this;
   }
 
@@ -251,6 +258,20 @@ test('audibility fades hold the current scheduled value before targeting', async
   });
 });
 
+test('disposal holds the current scheduled value before targeting silence', async () => {
+  await withAudioContext({}, async (contexts) => {
+    const audio = new StillnessAudio();
+    await audio.start();
+
+    audio.dispose();
+
+    assert.deepEqual(contexts[0]?.gains[0]?.gain.events.slice(-2), [
+      { type: 'hold', time: 4 },
+      { type: 'target', value: 0.0001, time: 4, timeConstant: 0.02 },
+    ]);
+  });
+});
+
 test('repeated starts and audibility calls are idempotent', async () => {
   await withAudioContext({}, async (contexts) => {
     const audio = new StillnessAudio();
@@ -321,11 +342,14 @@ test('audibility fades safely fall back when cancel-and-hold is unavailable', as
   await withAudioContext({ masterSupportsHold: false }, async (contexts) => {
     const audio = new StillnessAudio();
     await audio.start();
+    const master = contexts[0]!.gains[0]!.gain;
+    master.value = 0.037;
 
     await audio.setAudible(false);
 
-    assert.deepEqual(contexts[0]?.gains[0]?.gain.events.slice(-2), [
+    assert.deepEqual(master.events.slice(-3), [
       { type: 'cancel', time: 4 },
+      { type: 'set', value: 0.037, time: 4 },
       { type: 'target', value: 0.0001, time: 4, timeConstant: 0.08 },
     ]);
   });
