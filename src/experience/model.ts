@@ -1,3 +1,6 @@
+import type { ResonanceState } from '../resonance/resonance.ts';
+import type { MirrorSignal } from '../sensing/mirror-signal.ts';
+
 export const regulationPhases = [
   'capture',
   'match',
@@ -14,6 +17,22 @@ export type StateEstimate = {
   presence: number;
   trend: number;
   confidence: number;
+};
+
+export type ReliefState = StateEstimate & {
+  motion: number;
+  expressionActivity: number;
+  softness: number;
+  turbulence: number;
+  settling: number;
+  relief: number;
+  readiness: number;
+};
+
+export type SessionRenderFrame = {
+  resonance: ResonanceState;
+  relief: ReliefState;
+  mirror: MirrorSignal;
 };
 
 export const safePrior: StateEstimate = {
