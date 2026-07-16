@@ -2,12 +2,8 @@ import { smoothValue } from '../resonance/smoothing.ts';
 import type { SessionRenderFrame } from '../experience/model.ts';
 import type { MirrorPoint } from '../sensing/mirror-signal.ts';
 
-const FEATURE_PATHS = [
-  [33, 7, 163, 144, 145, 153, 154, 155, 133],
-  [263, 249, 390, 373, 374, 380, 381, 382, 362],
-  [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291],
-  [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109],
-] as const;
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+const TOPOLOGY_STRIDE = 7;
 
 type RenderValues = {
   turbulence: number;
@@ -42,7 +38,7 @@ export class SoulMirrorRenderer {
     window.addEventListener('resize', this.resize);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     this.resize();
-    this.frameHandle = requestAnimationFrame(this.render);
+    this.requestNextFrame();
   }
 
   update(frame: SessionRenderFrame): void {
@@ -51,7 +47,8 @@ export class SoulMirrorRenderer {
 
   dispose(): void {
     this.running = false;
-    cancelAnimationFrame(this.frameHandle);
+    if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
+    this.frameHandle = 0;
     window.removeEventListener('resize', this.resize);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.context = null;
@@ -69,6 +66,7 @@ export class SoulMirrorRenderer {
   };
 
   private render = (now: number): void => {
+    this.frameHandle = 0;
     if (!this.running) return;
     const context = this.context;
     if (!context) return;
@@ -83,14 +81,15 @@ export class SoulMirrorRenderer {
       this.values.readiness = smoothValue(this.values.readiness, frame.relief.readiness, deltaSeconds, 2);
     }
 
-    this.drawBackground(context, now);
+    const visualNow = this.reducedMotionQuery.matches ? 0 : now;
+    this.drawBackground(context, visualNow);
     if (frame?.mirror.topology) {
-      this.drawTopology(context, frame.mirror.topology.points, now);
+      this.drawTopology(context, frame.mirror.topology.points, visualNow);
     } else {
-      this.drawPurePresence(context, now);
+      this.drawPurePresence(context, visualNow);
     }
 
-    this.frameHandle = requestAnimationFrame(this.render);
+    this.requestNextFrame();
   };
 
   private drawBackground(context: CanvasRenderingContext2D, now: number): void {
@@ -119,38 +118,37 @@ export class SoulMirrorRenderer {
   private drawTopology(context: CanvasRenderingContext2D, points: MirrorPoint[], now: number): void {
     const width = this.canvas.width;
     const height = this.canvas.height;
-    const scale = Math.min(width, height) * (0.78 + this.values.relief * 0.08);
-    const jitter = this.reducedMotionQuery.matches ? 0 : this.values.turbulence * 5;
+    const scale = Math.min(width, height) * (0.58 + this.values.relief * 0.08);
+    const reducedMotion = this.reducedMotionQuery.matches;
+    const glow = 14 + this.values.relief * 30;
+    const aggregate = this.readTopologyField(points);
     context.save();
     context.translate(width / 2, height / 2);
     context.globalCompositeOperation = 'lighter';
 
-    for (const path of FEATURE_PATHS) {
+    context.strokeStyle = `rgba(255, 224, 180, ${0.045 + this.values.coherence * 0.13})`;
+    context.lineWidth = Math.max(1, width * 0.0008);
+    context.shadowColor = 'rgba(255, 196, 126, 0.32)';
+    context.shadowBlur = glow;
+    for (let ring = 0; ring < 5; ring += 1) {
+      const radius = scale * (0.14 + ring * 0.075 + aggregate.spread * 0.11 + this.values.relief * 0.035);
+      const sweep = Math.PI * (0.52 + aggregate.symmetry * 0.5 + ring * 0.035);
+      const drift = reducedMotion ? 0 : now * 0.000055 * (ring + 1);
+      const start = aggregate.tilt + ring * 1.73 + drift;
       context.beginPath();
-      path.forEach((index, pathIndex) => {
-        const point = points[index];
-        if (!point) return;
-        const phase = now * 0.0012 + index * 0.37;
-        const x = point.x * scale + Math.sin(phase) * jitter;
-        const y = point.y * scale + Math.cos(phase * 0.8) * jitter;
-        if (pathIndex === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
-      });
-      context.strokeStyle = `rgba(255, 224, 180, ${0.08 + this.values.coherence * 0.34})`;
-      context.lineWidth = Math.max(1, width * (0.0009 + this.values.readiness * 0.0007));
-      context.shadowColor = 'rgba(255, 196, 126, 0.42)';
-      context.shadowBlur = 18 + this.values.relief * 28;
+      context.arc(0, 0, radius, start, start + sweep);
       context.stroke();
     }
 
-    context.fillStyle = `rgba(167, 199, 255, ${0.04 + this.values.relief * 0.08})`;
-    const stride = this.values.coherence > 0.68 ? 12 : 8;
-    for (let index = 0; index < points.length; index += stride) {
+    context.shadowBlur = glow * 0.6;
+    for (let index = 0; index < points.length; index += TOPOLOGY_STRIDE) {
       const point = points[index];
       if (!point) continue;
-      const size = 1.2 + this.values.readiness * 2.2;
+      const sample = this.toConstellationPoint(point, index, scale, now, aggregate);
+      const size = 1.1 + this.values.readiness * 2.1 + sample.brightness * 0.9;
+      context.fillStyle = `rgba(167, 199, 255, ${0.035 + this.values.relief * 0.07 + sample.brightness * 0.05})`;
       context.beginPath();
-      context.arc(point.x * scale, point.y * scale, size, 0, Math.PI * 2);
+      context.arc(sample.x, sample.y, size, 0, Math.PI * 2);
       context.fill();
     }
 
@@ -178,12 +176,65 @@ export class SoulMirrorRenderer {
     context.restore();
   }
 
+  private readTopologyField(points: MirrorPoint[]): { spread: number; symmetry: number; tilt: number } {
+    if (points.length === 0) {
+      return { spread: 0.4, symmetry: 0.5, tilt: 0 };
+    }
+
+    let spread = 0;
+    let symmetry = 0;
+    let tilt = 0;
+    for (let index = 0; index < points.length; index += TOPOLOGY_STRIDE) {
+      const point = points[index];
+      if (!point) continue;
+      spread += Math.hypot(point.x, point.y);
+      symmetry += 1 - Math.min(1, Math.abs(point.x) * 2);
+      tilt += Math.atan2(point.y, point.x) * 0.01;
+    }
+
+    const sampleCount = Math.max(1, Math.ceil(points.length / TOPOLOGY_STRIDE));
+    return {
+      spread: Math.min(1, Math.max(0, spread / sampleCount)),
+      symmetry: Math.min(1, Math.max(0, symmetry / sampleCount)),
+      tilt,
+    };
+  }
+
+  private toConstellationPoint(
+    point: MirrorPoint,
+    index: number,
+    scale: number,
+    now: number,
+    aggregate: { spread: number; symmetry: number; tilt: number },
+  ): { x: number; y: number; brightness: number } {
+    const sourceRadius = Math.min(1, Math.hypot(point.x, point.y));
+    const sourceAngle = Math.atan2(point.y, point.x);
+    const seed = Math.sin((index + 1) * 12.9898 + point.z * 78.233) * 43_758.5453;
+    const variance = seed - Math.floor(seed);
+    const ring = (index % 37) / 37;
+    const motion = this.reducedMotionQuery.matches ? 0 : now * 0.000045 * (0.5 + variance);
+    const angle = index * GOLDEN_ANGLE + sourceAngle * 0.13 + aggregate.tilt + motion;
+    const radius = scale * (0.08 + ring * 0.42 + sourceRadius * 0.12 + aggregate.spread * 0.08);
+    const warp = scale * (variance - 0.5) * (0.08 + this.values.turbulence * 0.04);
+    return {
+      x: Math.cos(angle) * radius + Math.sin(angle * 2.1) * warp,
+      y: Math.sin(angle) * radius + Math.cos(angle * 1.7) * warp * (0.7 + aggregate.symmetry * 0.4),
+      brightness: variance,
+    };
+  }
+
   private onVisibilityChange = (): void => {
     if (document.hidden) {
-      cancelAnimationFrame(this.frameHandle);
+      if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
+      this.frameHandle = 0;
       return;
     }
     this.lastFrame = performance.now();
-    this.frameHandle = requestAnimationFrame(this.render);
+    this.requestNextFrame();
   };
+
+  private requestNextFrame(): void {
+    if (!this.running || document.hidden || this.frameHandle) return;
+    this.frameHandle = requestAnimationFrame(this.render);
+  }
 }
