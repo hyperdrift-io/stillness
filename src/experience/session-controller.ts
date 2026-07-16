@@ -233,7 +233,7 @@ export class SessionController {
               : calibrated.trend < -0.08
                 ? 'rising'
                 : 'holding',
-            source: camera.confidence >= 0.15 && camera.presence >= 0.15 ? 'mirror' : 'pure',
+            source: camera.confidence >= 0.15 ? 'mirror' : 'pure',
           };
       this.dependencies.onTelemetry?.(telemetry);
       this.lastTelemetryAt = now;
