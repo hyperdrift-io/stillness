@@ -87,6 +87,8 @@ function smoothProgress(elapsedMs: number): number {
   return linear * linear * (3 - 2 * linear);
 }
 
+const neutralSoftness = 0.5;
+
 export function scriptedStateForElapsed(elapsedMs: number): StateEstimate {
   const progress = smoothProgress(elapsedMs);
   return {
@@ -181,7 +183,7 @@ export class SessionController {
       variability: clamp01(Math.sqrt(cameraWindow.variance + motionWindow.variance)),
       settlingTrend: Math.max(-1, Math.min(1, -(cameraWindow.slopePerSecond + motionWindow.slopePerSecond) * 4)),
       expressionActivity: 0,
-      softness: 0,
+      softness: neutralSoftness,
       confidence: this.sensorConfidence,
       elapsedProgress,
     });
@@ -205,7 +207,7 @@ export class SessionController {
             presence: scripted.presence,
             sensingQuality: this.sensorConfidence,
             expressionActivity: 0,
-            softness: 0,
+            softness: neutralSoftness,
             turbulence: 1 - scripted.stability,
             settling: scripted.stability,
             relief: elapsedProgress,
@@ -231,7 +233,7 @@ export class SessionController {
               : calibrated.trend < -0.08
                 ? 'rising'
                 : 'holding',
-            source: 'pure',
+            source: camera.confidence >= 0.15 && camera.presence >= 0.15 ? 'mirror' : 'pure',
           };
       this.dependencies.onTelemetry?.(telemetry);
       this.lastTelemetryAt = now;

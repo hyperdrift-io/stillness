@@ -27,7 +27,7 @@ const initialTelemetry: SessionTelemetry = {
   presence: 0,
   sensingQuality: 0,
   expressionActivity: 0,
-  softness: 0,
+  softness: 0.5,
   turbulence: 0,
   settling: 0,
   relief: 0,
