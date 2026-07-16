@@ -1,17 +1,11 @@
 import { clamp01 } from '../experience/model.ts';
+import { initialMirrorSignal, type MirrorSignal } from './mirror-signal.ts';
 
-export type CameraObservation = {
-  motion: number;
-  presence: number;
-  confidence: number;
-  luminance: number;
-};
+export type CameraObservation = MirrorSignal;
 
 const initialObservation: CameraObservation = {
-  motion: 0,
-  presence: 0,
-  confidence: 0,
-  luminance: 0,
+  ...initialMirrorSignal,
+  mode: 'pure',
 };
 
 export class CameraSensor {
@@ -122,10 +116,14 @@ export class CameraSensor {
     this.previousLuminance = luminance;
 
     return {
+      mode: 'pure',
       motion,
       presence: clamp01(exposureConfidence * 0.45 + detailConfidence * 0.55),
       confidence,
       luminance: mean,
+      expressionActivity: 0,
+      softness: clamp01(1 - motion),
+      topology: null,
     };
   }
 }

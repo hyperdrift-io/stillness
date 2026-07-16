@@ -4,10 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { trackEvent } from '../analytics/events.ts';
 import { StillnessAudio } from '../audio/stillness-audio.ts';
+import { CameraSensor } from '../sensing/camera-sensor.ts';
 import { MirrorSignalAdapter } from '../sensing/mirror-signal-adapter.ts';
 import { MotionSensor } from '../sensing/motion-sensor.ts';
 import { BaselineStore } from '../state/baseline-store.ts';
-import { LightFieldRenderer } from '../visual/light-field-renderer.ts';
+import { SoulMirrorRenderer } from '../visual/soul-mirror-renderer.ts';
 import { GuidancePolicy, type GuidanceCue } from './guidance-policy.ts';
 import { SessionController, type SessionTelemetry } from './session-controller.ts';
 import { SessionGuidance } from './session-guidance.tsx';
@@ -209,10 +210,14 @@ export function StillnessExperience() {
 
     let controller: SessionController | null = null;
     try {
+      const mirrorMode = preferences.mode === 'mirror';
+      const camera = mirrorMode
+        ? new MirrorSignalAdapter()
+        : new CameraSensor();
       controller = new SessionController({
-        renderer: new LightFieldRenderer(canvas),
+        renderer: new SoulMirrorRenderer(canvas),
         audio: new StillnessAudio(),
-        camera: new MirrorSignalAdapter(),
+        camera,
         motion: new MotionSensor(),
         baseline: baselineRef.current,
         now: () => performance.now(),
@@ -230,7 +235,7 @@ export function StillnessExperience() {
       controllerRef.current = controller;
       controllerTokenRef.current = token;
 
-      if (!preferences.camera) void controller.setCameraEnabled(false);
+      if (!preferences.camera || preferences.mode === 'pure') void controller.setCameraEnabled(false);
       await controller.start();
       if (!transitionsRef.current.owns(token)) {
         await controller.stop();
