@@ -11,6 +11,7 @@ export type AudioParameters = {
 };
 
 const SILENT_GAIN = 0.0001;
+const INITIAL_ADAPTIVE_MASTER_GAIN = 0.08;
 
 export function audibleGainTarget(audible: boolean, adaptiveGain: number): number {
   return audible && Number.isFinite(adaptiveGain) ? adaptiveGain : SILENT_GAIN;
@@ -43,7 +44,7 @@ export class StillnessAudio {
   private pulseGain: GainNode | null = null;
   private pulseOscillator: OscillatorNode | null = null;
   private sources: AudioScheduledSourceNode[] = [];
-  private adaptiveMasterGain = 0.08;
+  private adaptiveMasterGain = INITIAL_ADAPTIVE_MASTER_GAIN;
   private audible = true;
 
   async start(): Promise<void> {
@@ -52,6 +53,8 @@ export class StillnessAudio {
       return;
     }
 
+    this.audible = true;
+    this.adaptiveMasterGain = INITIAL_ADAPTIVE_MASTER_GAIN;
     const context = new AudioContext({ latencyHint: 'playback' });
     const master = context.createGain();
     const droneGain = context.createGain();
@@ -158,7 +161,11 @@ export class StillnessAudio {
     if (this.audible === audible) return true;
     this.audible = audible;
     const now = context.currentTime;
-    master.gain.cancelScheduledValues(now);
+    if (typeof master.gain.cancelAndHoldAtTime === 'function') {
+      master.gain.cancelAndHoldAtTime(now);
+    } else {
+      master.gain.cancelScheduledValues(now);
+    }
     master.gain.setTargetAtTime(
       audibleGainTarget(audible, this.adaptiveMasterGain),
       now,
