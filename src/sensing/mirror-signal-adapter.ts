@@ -28,10 +28,16 @@ export class MirrorSignalAdapter {
   private latest: MirrorSignal = { ...initialMirrorSignal, mode: 'mirror' };
   private lastSampleTime = 0;
   private loading: Promise<FaceLandmarkerClient> | null = null;
+  private generation = 0;
 
   async start(): Promise<boolean> {
     if (this.stream) return true;
     if (!navigator.mediaDevices?.getUserMedia) return false;
+
+    const generation = this.generation + 1;
+    this.generation = generation;
+    let pendingStream: MediaStream | null = null;
+    let pendingVideo: HTMLVideoElement | null = null;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -43,14 +49,27 @@ export class MirrorSignalAdapter {
           frameRate: { ideal: 24, max: 30 },
         },
       });
+      pendingStream = stream;
+      if (this.generation !== generation) {
+        this.clearMedia(pendingStream, pendingVideo);
+        return false;
+      }
+
       const video = document.createElement('video');
       video.muted = true;
       video.playsInline = true;
       video.srcObject = stream;
+      pendingVideo = video;
 
       this.stream = stream;
       this.video = video;
       await video.play();
+      if (this.generation !== generation || this.stream !== stream || this.video !== video) {
+        this.clearMedia(pendingStream, pendingVideo);
+        if (this.stream === stream) this.stream = null;
+        if (this.video === video) this.video = null;
+        return false;
+      }
 
       const canvas = document.createElement('canvas');
       canvas.width = ANALYSIS_WIDTH;
@@ -61,19 +80,20 @@ export class MirrorSignalAdapter {
       this.loading = loading;
       loading
         .then((client) => {
-          if (this.loading === loading && this.stream) {
+          if (this.generation === generation && this.loading === loading && this.stream === stream) {
             this.landmarker = client;
             return;
           }
           client.dispose();
         })
         .catch(() => {
-          this.landmarker = null;
+          if (this.generation === generation && this.loading === loading) this.landmarker = null;
         });
       this.frame = requestAnimationFrame(this.sample);
       return true;
     } catch {
-      this.stop();
+      this.clearMedia(pendingStream, pendingVideo);
+      if (this.generation === generation) this.stop();
       return false;
     }
   }
@@ -82,12 +102,13 @@ export class MirrorSignalAdapter {
     return {
       ...this.latest,
       topology: this.latest.topology
-        ? { ...this.latest.topology, points: [...this.latest.topology.points] }
+        ? { ...this.latest.topology, points: this.latest.topology.points.map((point) => ({ ...point })) }
         : null,
     };
   }
 
   stop(): void {
+    this.generation += 1;
     cancelAnimationFrame(this.frame);
     this.landmarker?.dispose();
     for (const track of this.stream?.getTracks() ?? []) track.stop();
@@ -104,7 +125,16 @@ export class MirrorSignalAdapter {
     this.previousCenter = null;
     this.landmarker = null;
     this.loading = null;
+    this.lastSampleTime = 0;
     this.latest = { ...initialMirrorSignal, mode: 'mirror' };
+  }
+
+  private clearMedia(stream: MediaStream | null, video: HTMLVideoElement | null): void {
+    for (const track of stream?.getTracks() ?? []) track.stop();
+    if (video) {
+      video.pause();
+      video.srcObject = null;
+    }
   }
 
   private sample = (timestamp: number): void => {
