@@ -7,6 +7,8 @@ import type { SessionPreferences } from './session-preferences.ts';
 type TelemetryDirection = SessionTelemetry['direction'];
 type TelemetrySource = SessionTelemetry['source'];
 type Preference = keyof SessionPreferences;
+type DialogLifecycle = Pick<HTMLDialogElement, 'close' | 'open'>;
+type FocusTarget = Pick<HTMLElement, 'focus'>;
 
 type SessionMenuProps = {
   preferences: SessionPreferences;
@@ -52,6 +54,16 @@ export function sensingLabel(
   return 'clear';
 }
 
+export function closeOpenDialogAndRestoreFocus(
+  dialog: DialogLifecycle | null,
+  trigger: FocusTarget | null,
+): void {
+  if (dialog === null || !dialog.open) return;
+
+  dialog.close();
+  trigger?.focus();
+}
+
 export function SessionMenu({
   preferences,
   telemetry,
@@ -73,7 +85,11 @@ export function SessionMenu({
     } else if (!open && dialog.open) {
       dialog.close();
     }
-  }, [open]);
+
+    return () => {
+      closeOpenDialogAndRestoreFocus(dialog, triggerRef.current);
+    };
+  }, [open, triggerRef]);
 
   return (
     <dialog
@@ -143,30 +159,68 @@ export function SessionMenu({
         <section aria-labelledby="live-signals-title">
           <h3 id="live-signals-title">Live signals</h3>
           <p>
-            <span>Movement</span>
-            <meter min="0" max="1" value={telemetry.movement}>Movement</meter>
-            <span>{movementLabel(telemetry.movement, telemetry.direction)}</span>
+            <span id="movement-metric-name">Movement</span>
+            <meter
+              min="0"
+              max="1"
+              aria-labelledby="movement-metric-name"
+              aria-describedby="movement-metric-state"
+              value={telemetry.movement}
+            >
+              Movement
+            </meter>
+            <span id="movement-metric-state">
+              {movementLabel(telemetry.movement, telemetry.direction)}
+            </span>
           </p>
           <p>
-            <span>Steadiness</span>
-            <meter min="0" max="1" value={telemetry.steadiness}>Steadiness</meter>
-            <span>{steadinessLabel(telemetry.steadiness)}</span>
+            <span id="steadiness-metric-name">Steadiness</span>
+            <meter
+              min="0"
+              max="1"
+              aria-labelledby="steadiness-metric-name"
+              aria-describedby="steadiness-metric-state"
+              value={telemetry.steadiness}
+            >
+              Steadiness
+            </meter>
+            <span id="steadiness-metric-state">{steadinessLabel(telemetry.steadiness)}</span>
           </p>
           <p>
-            <span>Presence</span>
-            <meter min="0" max="1" value={telemetry.presence}>Presence</meter>
-            <span>{presenceLabel(telemetry.presence, telemetry.source)}</span>
+            <span id="presence-metric-name">Presence</span>
+            <meter
+              min="0"
+              max="1"
+              aria-labelledby="presence-metric-name"
+              aria-describedby="presence-metric-state"
+              value={telemetry.presence}
+            >
+              Presence
+            </meter>
+            <span id="presence-metric-state">
+              {presenceLabel(telemetry.presence, telemetry.source)}
+            </span>
           </p>
           <p>
-            <span>Sensing</span>
-            <meter min="0" max="1" value={telemetry.sensingQuality}>Sensing</meter>
-            <span>{sensingLabel(telemetry.sensingQuality, telemetry.source)}</span>
+            <span id="sensing-metric-name">Sensing</span>
+            <meter
+              min="0"
+              max="1"
+              aria-labelledby="sensing-metric-name"
+              aria-describedby="sensing-metric-state"
+              value={telemetry.sensingQuality}
+            >
+              Sensing
+            </meter>
+            <span id="sensing-metric-state">
+              {sensingLabel(telemetry.sensingQuality, telemetry.source)}
+            </span>
           </p>
         </section>
       ) : null}
 
       <p className="privacy-note">
-        Camera frames, audio, and motion samples stay in memory on this device and are never recorded.
+        Camera, audio, and motion signals are processed only in memory on this device, then discarded. Nothing is saved or sent.
       </p>
       <button type="button" className="text-action" onClick={onLeave}>
         Leave experience
