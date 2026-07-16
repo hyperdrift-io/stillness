@@ -4,7 +4,7 @@
 
 **Goal:** Build Relief as a mirror-first PWA where a local, face-structured soul mirror produces immediate relief first and renewed readiness second, while Pure remains the no-camera fallback.
 
-**Architecture:** Keep one session engine and one state model. Add a `MirrorSignalAdapter` that owns camera and MediaPipe, a `ReliefStateEstimator` extension that turns landmarks/blendshapes into shared state, and a `SoulMirrorRenderer` behind the existing renderer port. Keep the existing light field as Pure mode and fallback.
+**Architecture:** Keep one session engine and one state model. Add a `MirrorSignalAdapter` that owns camera and MediaPipe, a `ReliefStateEstimator` extension that turns landmarks/blendshapes into shared state, and a `SoulMirrorRenderer` behind the existing renderer port. Use the soul mirror renderer for both Mirror and Pure so mode changes work during a session; keep the existing light field as a fallback only.
 
 **Tech Stack:** Waku, React 19, TypeScript, semantic CSS, browser `getUserMedia`, MediaPipe Tasks Vision `@mediapipe/tasks-vision@0.10.35`, Canvas 2D for the soul mirror, existing WebGL2 light field for Pure mode, Web Audio.
 
@@ -33,8 +33,8 @@
 - Modify `src/experience/model.ts`: add Relief session state types and rendering frame type.
 - Modify `src/state/state-estimator.ts`: replace the current stillness-only estimate with Relief-aware state derivation while preserving existing activation/stability inputs.
 - Modify `src/experience/session-controller.ts`: consume mirror signals, emit richer telemetry, and pass a render frame to renderers.
-- Create `src/visual/soul-mirror-renderer.ts`: Canvas 2D abstract face topology renderer.
-- Modify `src/visual/light-field-renderer.ts`: adapt to the new renderer port and ignore mirror topology for Pure/fallback.
+- Create `src/visual/soul-mirror-renderer.ts`: Canvas 2D abstract face topology renderer. It renders landmarks in Mirror mode and a non-camera presence field in Pure or low-confidence fallback.
+- Modify `src/visual/light-field-renderer.ts`: adapt to the new renderer port and keep it available as a fallback renderer only.
 - Modify `src/experience/session-preferences.ts`: add explicit `mode: 'mirror' | 'pure'` while preserving guidance/sound/signals/camera toggles.
 - Modify `src/experience/stillness-experience.tsx`: update Relief landing copy, mode controls, renderer/adapter selection, fallback messaging.
 - Modify `src/experience/session-menu.tsx`: expose Mirror/Pure, expression activity, turbulence, relief, readiness, confidence.
@@ -1184,7 +1184,7 @@ git commit -m "feat: make Relief mirror the default entry"
 
 ---
 
-### Task 8: Select Renderer And Signal Adapter By Mode
+### Task 8: Select Signal Adapter By Mode
 
 **Files:**
 - Modify: `src/experience/stillness-experience.tsx`
@@ -1193,7 +1193,7 @@ git commit -m "feat: make Relief mirror the default entry"
 
 **Interfaces:**
 - Consumes: `SessionPreferences.mode`
-- Produces: Mirror mode uses `MirrorSignalAdapter` + `SoulMirrorRenderer`; Pure uses `CameraSensor` + `LightFieldRenderer`.
+- Produces: all modes use `SoulMirrorRenderer`; Mirror uses `MirrorSignalAdapter`; Pure uses `CameraSensor` with camera disabled unless explicitly enabled again.
 
 - [ ] **Step 1: Make `CameraSensor` emit `MirrorSignal`**
 
@@ -1238,15 +1238,12 @@ import { MirrorSignalAdapter } from '../sensing/mirror-signal-adapter.ts';
 import { SoulMirrorRenderer } from '../visual/soul-mirror-renderer.ts';
 ```
 
-- [ ] **Step 3: Select adapter and renderer in `begin()`**
+- [ ] **Step 3: Select adapter in `begin()` and use soul mirror renderer**
 
 Before `new SessionController`, add:
 
 ```ts
 const mirrorMode = preferences.mode === 'mirror';
-const renderer = mirrorMode
-  ? new SoulMirrorRenderer(canvas)
-  : new LightFieldRenderer(canvas);
 const camera = mirrorMode
   ? new MirrorSignalAdapter()
   : new CameraSensor();
@@ -1255,11 +1252,11 @@ const camera = mirrorMode
 Then pass:
 
 ```ts
-renderer,
+renderer: new SoulMirrorRenderer(canvas),
 camera,
 ```
 
-instead of constructing `LightFieldRenderer` and `CameraSensor` inline.
+instead of constructing `LightFieldRenderer` and `CameraSensor` inline. `LightFieldRenderer` remains imported only where a later fallback strategy needs it; do not use it as the normal Pure renderer.
 
 Change the camera pre-disable logic:
 
