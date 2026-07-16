@@ -18,6 +18,7 @@ export type GuidanceCue = {
   id: GuidanceCueKey;
   label: string;
   invitation: string;
+  explanation: string;
 };
 
 const CUES: Record<GuidanceCueKey, GuidanceCue> = {
@@ -25,31 +26,37 @@ const CUES: Record<GuidanceCueKey, GuidanceCue> = {
     id: 'active',
     label: 'Movement has energy',
     invitation: 'Let your hands become heavy for one breath.',
+    explanation: 'The field is holding more energy while movement stays active.',
   },
   settling: {
     id: 'settling',
     label: 'Movement is settling',
     invitation: 'Let the next exhale take a little longer.',
+    explanation: 'The field is making more space as movement becomes steadier.',
   },
   steady: {
     id: 'steady',
     label: 'A steadier rhythm is forming',
     invitation: 'Soften your gaze toward the center.',
+    explanation: 'The field is smoothing into a more even rhythm.',
   },
   quiet: {
     id: 'quiet',
     label: 'The field has become quieter',
     invitation: 'Notice the space after the next breath.',
+    explanation: 'The field is reducing detail as movement stays quiet.',
   },
   changing: {
     id: 'changing',
     label: 'The rhythm is changing',
     invitation: 'Let the field meet the change; nothing needs correcting.',
+    explanation: 'The field is widening to meet the change.',
   },
   scripted: {
     id: 'scripted',
     label: 'Following a gentle rhythm',
     invitation: 'Unclench the jaw and allow the shoulders to drop.',
+    explanation: 'The field is following its gentle descent while sensing is unavailable.',
   },
 };
 

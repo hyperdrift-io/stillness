@@ -10,9 +10,9 @@ export function SessionGuidance({ cue, visible }: SessionGuidanceProps) {
 
   return (
     <section className="session-guidance" aria-live="polite" aria-atomic="true">
-      <p className="signal-label">Guidance</p>
+      <p className="signal-label">{cue.label}</p>
       <h2>{cue.invitation}</h2>
-      <p className="signal-explanation">{cue.label}</p>
+      <p className="signal-explanation">{cue.explanation}</p>
     </section>
   );
 }

@@ -28,6 +28,7 @@ test('session menu uses a labelled native dialog and every approved control', as
   const source = await read('src/experience/session-menu.tsx');
 
   assert.match(source, /<dialog/);
+  assert.match(source, /className="session-menu"/);
   assert.match(source, /aria-labelledby="session-menu-title"/);
   assert.match(source, /\.showModal\(\)/);
   assert.match(source, /\.close\(\)/);
@@ -151,7 +152,10 @@ test('guidance exposes one polite live region', async () => {
   const source = await read('src/experience/session-guidance.tsx');
 
   assert.match(source, /aria-live="polite"/);
+  assert.match(source, /className="signal-label">\{cue\.label\}/);
   assert.match(source, /cue\.invitation/);
+  assert.match(source, /className="signal-explanation">\{cue\.explanation\}/);
+  assert.doesNotMatch(source, />Guidance</);
   assert.equal(source.match(/aria-live=/g)?.length, 1);
 });
 

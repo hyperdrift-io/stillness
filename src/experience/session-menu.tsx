@@ -94,6 +94,7 @@ export function SessionMenu({
   return (
     <dialog
       ref={dialogRef}
+      className="session-menu"
       aria-labelledby="session-menu-title"
       onCancel={(event) => {
         event.preventDefault();
@@ -161,6 +162,7 @@ export function SessionMenu({
           <p>
             <span id="movement-metric-name">Movement</span>
             <meter
+              className="signal-meter"
               min="0"
               max="1"
               aria-labelledby="movement-metric-name"
@@ -176,6 +178,7 @@ export function SessionMenu({
           <p>
             <span id="steadiness-metric-name">Steadiness</span>
             <meter
+              className="signal-meter"
               min="0"
               max="1"
               aria-labelledby="steadiness-metric-name"
@@ -189,6 +192,7 @@ export function SessionMenu({
           <p>
             <span id="presence-metric-name">Presence</span>
             <meter
+              className="signal-meter"
               min="0"
               max="1"
               aria-labelledby="presence-metric-name"
@@ -204,6 +208,7 @@ export function SessionMenu({
           <p>
             <span id="sensing-metric-name">Sensing</span>
             <meter
+              className="signal-meter"
               min="0"
               max="1"
               aria-labelledby="sensing-metric-name"

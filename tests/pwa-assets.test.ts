@@ -41,7 +41,11 @@ test('service worker caches the shell and is registered by the client island', a
   assert.match(worker, /request\.mode === 'navigate'/);
   assert.match(worker, /addEventListener\('message'/);
   assert.match(experience, /serviceWorker\.register\('\/sw\.js'\)/);
-  assert.match(experience, /postMessage/);
+  assert.match(experience, /postMessage\(\{ type: 'CACHE_URLS', urls \}\)/);
+  for (const component of ['SessionGuidance', 'SessionMenu']) {
+    assert.match(experience, new RegExp(`import \\{ ${component} \\}`));
+    assert.match(experience, new RegExp(`<${component}`));
+  }
 });
 
 test('public discovery and metadata assets are present', async () => {

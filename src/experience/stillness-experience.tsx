@@ -7,16 +7,47 @@ import { CameraSensor } from '../sensing/camera-sensor.ts';
 import { MotionSensor } from '../sensing/motion-sensor.ts';
 import { BaselineStore } from '../state/baseline-store.ts';
 import { LightFieldRenderer } from '../visual/light-field-renderer.ts';
-import { SessionController } from './session-controller.ts';
+import { GuidancePolicy, type GuidanceCue } from './guidance-policy.ts';
+import { SessionController, type SessionTelemetry } from './session-controller.ts';
+import { SessionGuidance } from './session-guidance.tsx';
+import { SessionMenu } from './session-menu.tsx';
+import {
+  commandForKey,
+  defaultSessionPreferences,
+  type SessionPreferences,
+} from './session-preferences.ts';
 
 type ExperienceMode = 'ready' | 'starting' | 'active' | 'error';
 
+const initialTelemetry: SessionTelemetry = {
+  movement: 0,
+  steadiness: 0,
+  presence: 0,
+  sensingQuality: 0,
+  direction: 'holding',
+  source: 'scripted',
+};
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement
+    && (target.isContentEditable || target.matches('input, textarea, select'));
+}
+
 export function StillnessExperience() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const controllerRef = useRef<SessionController | null>(null);
+  const guidancePolicyRef = useRef(new GuidancePolicy());
   const baselineRef = useRef(new BaselineStore());
   const [mode, setMode] = useState<ExperienceMode>('ready');
   const [message, setMessage] = useState('');
+  const [preferences, setPreferences] = useState<SessionPreferences>(() => ({
+    ...defaultSessionPreferences,
+  }));
+  const [telemetry, setTelemetry] = useState<SessionTelemetry>(initialTelemetry);
+  const [cue, setCue] = useState<GuidanceCue | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [audioAvailable, setAudioAvailable] = useState(true);
 
   const leave = useCallback(async () => {
     const controller = controllerRef.current;
@@ -24,10 +55,38 @@ export function StillnessExperience() {
     try {
       if (controller) await controller.stop();
     } finally {
+      guidancePolicyRef.current.reset();
+      setTelemetry(initialTelemetry);
+      setCue(null);
+      setMenuOpen(false);
+      setAudioAvailable(true);
       setMode('ready');
       setMessage('');
     }
   }, []);
+
+  const togglePreference = useCallback((
+    preference: keyof SessionPreferences,
+    enabled: boolean,
+  ) => {
+    setPreferences((current) => ({ ...current, [preference]: enabled }));
+
+    if (preference === 'sound') {
+      void controllerRef.current?.setSoundEnabled(enabled).then((available) => {
+        setAudioAvailable(available);
+      });
+    } else if (preference === 'camera') {
+      void controllerRef.current?.setCameraEnabled(enabled);
+    } else if (preference === 'guidance') {
+      if (enabled) {
+        guidancePolicyRef.current.reset();
+        const elapsedMs = controllerRef.current?.snapshot().elapsedMs ?? 0;
+        setCue(guidancePolicyRef.current.evaluate(telemetry, elapsedMs));
+      } else {
+        setCue(null);
+      }
+    }
+  }, [telemetry]);
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -51,7 +110,45 @@ export function StillnessExperience() {
   useEffect(() => {
     if (mode !== 'active') return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') void leave();
+      if (event.key === 'Escape') {
+        if (menuOpen) {
+          setMenuOpen(false);
+        } else {
+          void leave();
+        }
+        return;
+      }
+
+      const command = commandForKey({
+        key: event.key,
+        modifier: event.altKey || event.ctrlKey || event.metaKey,
+        editable: isEditableTarget(event.target),
+      });
+      if (command === null) return;
+      event.preventDefault();
+
+      switch (command) {
+        case 'menu':
+          setMenuOpen((open) => !open);
+          break;
+        case 'sound':
+          togglePreference('sound', !preferences.sound);
+          break;
+        case 'guidance':
+          togglePreference('guidance', !preferences.guidance);
+          break;
+        case 'signals':
+          if (!menuOpen) {
+            togglePreference('liveSignals', true);
+            setMenuOpen(true);
+          } else {
+            togglePreference('liveSignals', !preferences.liveSignals);
+          }
+          break;
+        case 'camera':
+          togglePreference('camera', !preferences.camera);
+          break;
+      }
     };
     const onVisibilityChange = () => {
       void controllerRef.current?.setHidden(document.hidden);
@@ -62,13 +159,18 @@ export function StillnessExperience() {
       window.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [leave, mode]);
+  }, [leave, menuOpen, mode, preferences, togglePreference]);
 
   async function begin(): Promise<void> {
     const canvas = canvasRef.current;
     if (!canvas || mode === 'starting' || mode === 'active') return;
     setMode('starting');
     setMessage('');
+    guidancePolicyRef.current.reset();
+    setTelemetry(initialTelemetry);
+    setCue(null);
+    setMenuOpen(false);
+    setAudioAvailable(true);
 
     const controller = new SessionController({
       renderer: new LightFieldRenderer(canvas),
@@ -79,11 +181,20 @@ export function StillnessExperience() {
       now: () => performance.now(),
       requestFrame: (callback) => requestAnimationFrame(callback),
       cancelFrame: (handle) => cancelAnimationFrame(handle),
+      onTelemetry: (nextTelemetry) => {
+        setTelemetry(nextTelemetry);
+        setCue(guidancePolicyRef.current.evaluate(
+          nextTelemetry,
+          controller.snapshot().elapsedMs,
+        ));
+      },
     });
     controllerRef.current = controller;
 
     try {
+      if (!preferences.camera) void controller.setCameraEnabled(false);
       await controller.start();
+      setAudioAvailable(await controller.setSoundEnabled(preferences.sound));
       setMode('active');
     } catch {
       await controller.stop();
@@ -117,8 +228,22 @@ export function StillnessExperience() {
           <p className="eyebrow">Stillness</p>
           <h1 id="stillness-title">Let the noise disappear.</h1>
           <p>
-            A private audiovisual experience that meets your present rhythm and
-            gradually makes space for quiet.
+            Camera and motion sensing meet your present rhythm while everything stays
+            private on this device.
+          </p>
+          <label className="mode-choice">
+            <input
+              type="checkbox"
+              checked={preferences.guidance}
+              onChange={(event) => setPreferences((current) => ({
+                ...current,
+                guidance: event.currentTarget.checked,
+              }))}
+            />
+            <span>Guide me into stillness</span>
+          </label>
+          <p className="mode-note">
+            Turn guidance off for an uninterrupted Pure session.
           </p>
           <button
             className="primary"
@@ -128,7 +253,10 @@ export function StillnessExperience() {
           >
             {mode === 'starting' ? 'Opening' : 'Begin'}
           </button>
-          <p className="privacy-note">Camera sensing is optional and stays on this device.</p>
+          <p className="session-note">
+            Soothing sound begins with the experience. Press <kbd>?</kbd> anytime to adjust
+            guidance, sound, live signals, or camera sensing.
+          </p>
           <details>
             <summary>Privacy</summary>
             <p>
@@ -144,9 +272,28 @@ export function StillnessExperience() {
       </section>
 
       {mode === 'active' ? (
-        <button className="exit-session" type="button" onClick={() => void leave()}>
-          Leave experience
-        </button>
+        <>
+          <SessionGuidance cue={cue} visible={preferences.guidance} />
+          <button
+            ref={menuTriggerRef}
+            className="session-menu-trigger"
+            type="button"
+            aria-label="Adjust session"
+            onClick={() => setMenuOpen(true)}
+          >
+            <span aria-hidden="true">?</span> adjust session
+          </button>
+          <SessionMenu
+            preferences={preferences}
+            telemetry={telemetry}
+            audioAvailable={audioAvailable}
+            open={menuOpen}
+            triggerRef={menuTriggerRef}
+            onToggle={togglePreference}
+            onClose={() => setMenuOpen(false)}
+            onLeave={() => void leave()}
+          />
+        </>
       ) : null}
       <p className="visually-hidden" aria-live="polite">
         {mode === 'active' ? 'The experience has begun. Press Escape to leave.' : ''}

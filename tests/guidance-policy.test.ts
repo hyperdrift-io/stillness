@@ -170,3 +170,24 @@ test('reset clears cue hysteresis for a new session', () => {
 
   assert.equal(policy.evaluate(quietTelemetry, 1_000)?.label, 'The field has become quieter');
 });
+
+test('every cue explains how the field is responding to the signal', () => {
+  const cases = [
+    [activeTelemetry, 'The field is holding more energy while movement stays active.'],
+    [
+      { ...sensedTelemetry, direction: 'settling' as const },
+      'The field is making more space as movement becomes steadier.',
+    ],
+    [sensedTelemetry, 'The field is smoothing into a more even rhythm.'],
+    [quietTelemetry, 'The field is reducing detail as movement stays quiet.'],
+    [
+      { ...sensedTelemetry, direction: 'rising' as const },
+      'The field is widening to meet the change.',
+    ],
+    [scriptedTelemetry, 'The field is following its gentle descent while sensing is unavailable.'],
+  ] as const;
+
+  for (const [telemetry, explanation] of cases) {
+    assert.equal(new GuidancePolicy().evaluate(telemetry, 0)?.explanation, explanation);
+  }
+});
