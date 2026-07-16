@@ -14,6 +14,8 @@ type HarnessOptions = {
   now?: () => number;
   cameraStartResult?: boolean;
   cameraStart?: () => Promise<boolean>;
+  cameraRead?: SessionDependencies['camera']['read'];
+  motionRead?: SessionDependencies['motion']['read'];
   baseline?: {
     load: () => Promise<PersonalBaseline | null>;
     saveSession: SessionDependencies['baseline']['saveSession'];
@@ -48,17 +50,17 @@ function createHarness(observationConfidence = 0, options: HarnessOptions = {}):
         if (options.cameraStart) return options.cameraStart();
         return options.cameraStartResult ?? true;
       },
-      read: () => ({
+      read: options.cameraRead ?? (() => ({
         motion: 0.95,
         presence: 0.9,
         confidence: observationConfidence,
         luminance: 0.5,
-      }),
+      })),
       stop: () => calls.push('camera:stop'),
     },
     motion: {
       start: async () => true,
-      read: () => ({ motion: 0.8, confidence: observationConfidence }),
+      read: options.motionRead ?? (() => ({ motion: 0.8, confidence: observationConfidence })),
       stop: () => calls.push('motion:stop'),
     },
     baseline: options.baseline ?? {
@@ -197,12 +199,51 @@ test('SessionController emits bounded telemetry at a readable cadence', async ()
   }
 });
 
-test('SessionController labels unavailable sensing as scripted', async () => {
-  const { controller, telemetry } = createHarness(0);
+test('SessionController labels decreasing movement as settling', async () => {
+  let movement = 1;
+  const { controller, telemetry } = createHarness(1, {
+    cameraRead: () => ({ motion: movement, presence: 0.9, confidence: 1, luminance: 0.5 }),
+    motionRead: () => ({ motion: movement, confidence: 1 }),
+  });
+  await controller.start();
+  controller.step(0);
+  movement = 0;
+  controller.step(250);
+
+  assert.equal(telemetry.at(-1)?.direction, 'settling');
+});
+
+test('SessionController labels increasing movement as rising', async () => {
+  let movement = 0;
+  const { controller, telemetry } = createHarness(1, {
+    cameraRead: () => ({ motion: movement, presence: 0.9, confidence: 1, luminance: 0.5 }),
+    motionRead: () => ({ motion: movement, confidence: 1 }),
+  });
+  await controller.start();
+  controller.step(0);
+  movement = 1;
+  controller.step(250);
+
+  assert.equal(telemetry.at(-1)?.direction, 'rising');
+});
+
+test('SessionController publishes safe scripted telemetry when sensing confidence is zero', async () => {
+  const { controller, telemetry } = createHarness(0, {
+    cameraRead: () => ({ motion: 0.95, presence: 0.9, confidence: 0, luminance: 0.5 }),
+    motionRead: () => ({ motion: 0.8, confidence: 0 }),
+  });
   await controller.start();
   controller.step(0);
 
-  assert.equal(telemetry[0]?.source, 'scripted');
+  const scripted = scriptedStateForElapsed(0);
+  assert.deepEqual(telemetry[0], {
+    movement: 0,
+    steadiness: scripted.stability,
+    presence: scripted.presence,
+    sensingQuality: 0,
+    direction: 'holding',
+    source: 'scripted',
+  });
 });
 
 test('SessionController resets telemetry cadence for a restarted session', async () => {
@@ -214,6 +255,48 @@ test('SessionController resets telemetry cadence for a restarted session', async
   controller.step(0);
 
   assert.equal(telemetry.length, 2);
+});
+
+test('SessionController clears camera and device feature history when a session restarts', async () => {
+  let movement = 1;
+  const { controller, telemetry } = createHarness(1, {
+    cameraRead: () => ({ motion: movement, presence: 0.9, confidence: 1, luminance: 0.5 }),
+    motionRead: () => ({ motion: movement, confidence: 1 }),
+  });
+  await controller.start();
+  controller.step(0);
+  controller.step(250);
+  await controller.stop();
+
+  movement = 0;
+  await controller.start();
+  controller.step(0);
+
+  assert.equal(telemetry.at(-1)?.movement, 0);
+});
+
+test('camera preference clears camera feature history when sensing is disabled', async () => {
+  let cameraMotion = 1;
+  let cameraConfidence = 1;
+  const { controller, telemetry } = createHarness(1, {
+    cameraRead: () => ({
+      motion: cameraMotion,
+      presence: 0.9,
+      confidence: cameraConfidence,
+      luminance: 0.5,
+    }),
+    motionRead: () => ({ motion: 0, confidence: 1 }),
+  });
+  await controller.start();
+  controller.step(0);
+  controller.step(250);
+
+  await controller.setCameraEnabled(false);
+  cameraMotion = 0;
+  cameraConfidence = 0;
+  controller.step(500);
+
+  assert.equal(telemetry.at(-1)?.movement, 0);
 });
 
 test('camera preference releases its resource immediately', async () => {

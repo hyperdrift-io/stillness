@@ -121,6 +121,8 @@ export class SessionController {
     this.pausedAt = null;
     this.phase = 'capture';
     this.lastTelemetryAt = -Infinity;
+    this.cameraMotion.clear();
+    this.deviceMotion.clear();
 
     // These calls occur before the first await so browser permission and audio
     // policies see the original Begin gesture.
@@ -184,23 +186,32 @@ export class SessionController {
           ),
         }
       : measured;
+    const scripted = scriptedStateForElapsed(this.elapsedMs);
     if (now - this.lastTelemetryAt >= 250 || this.lastTelemetryAt === -Infinity) {
-      const movement = clamp01(cameraWindow.mean * 0.68 + motionWindow.mean * 0.32);
-      this.dependencies.onTelemetry?.({
-        movement,
-        steadiness: clamp01(calibrated.stability),
-        presence: clamp01(calibrated.presence),
-        sensingQuality: this.sensorConfidence,
-        direction: calibrated.trend < -0.08
-          ? 'settling'
-          : calibrated.trend > 0.08
-            ? 'rising'
-            : 'holding',
-        source: this.sensorConfidence >= 0.15 ? 'sensed' : 'scripted',
-      });
+      const telemetry: SessionTelemetry = this.sensorConfidence < 0.15
+        ? {
+            movement: 0,
+            steadiness: scripted.stability,
+            presence: scripted.presence,
+            sensingQuality: this.sensorConfidence,
+            direction: 'holding',
+            source: 'scripted',
+          }
+        : {
+            movement: clamp01(cameraWindow.mean * 0.68 + motionWindow.mean * 0.32),
+            steadiness: clamp01(calibrated.stability),
+            presence: clamp01(calibrated.presence),
+            sensingQuality: this.sensorConfidence,
+            direction: calibrated.trend > 0.08
+              ? 'settling'
+              : calibrated.trend < -0.08
+                ? 'rising'
+                : 'holding',
+            source: 'sensed',
+          };
+      this.dependencies.onTelemetry?.(telemetry);
       this.lastTelemetryAt = now;
     }
-    const scripted = scriptedStateForElapsed(this.elapsedMs);
     const adaptation = this.sensorConfidence * 0.65;
     const state: StateEstimate = {
       activation: interpolate(scripted.activation, calibrated.activation, adaptation),
@@ -237,6 +248,7 @@ export class SessionController {
       });
     }
     this.dependencies.camera.stop();
+    this.cameraMotion.clear();
     return Promise.resolve(true);
   }
 

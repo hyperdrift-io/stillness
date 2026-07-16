@@ -170,7 +170,7 @@ const telemetry: SessionTelemetry = {
   steadiness: clamp01(calibrated.stability),
   presence: clamp01(calibrated.presence),
   sensingQuality: this.sensorConfidence,
-  direction: calibrated.trend < -0.08 ? 'settling' : calibrated.trend > 0.08 ? 'rising' : 'holding',
+  direction: calibrated.trend > 0.08 ? 'settling' : calibrated.trend < -0.08 ? 'rising' : 'holding',
   source: this.sensorConfidence >= 0.15 ? 'sensed' : 'scripted',
 };
 if (now - this.lastTelemetryAt >= 250 || this.lastTelemetryAt === -Infinity) {
@@ -179,7 +179,7 @@ if (now - this.lastTelemetryAt >= 250 || this.lastTelemetryAt === -Infinity) {
 }
 ```
 
-Reset the throttle on `start()`. Reuse `CameraPort.start/stop`. Disabling camera must call `stop()` synchronously; enabling returns the result of `start()` without changing the running state.
+Reset the throttle and both feature windows on `start()`. For a scripted source, publish safe scripted steadiness/presence, zero movement, and a holding direction rather than presenting low-confidence raw observations as sensed values. Reuse `CameraPort.start/stop`; disabling camera must call `stop()` synchronously and clear the camera feature window, while enabling returns the result of `start()` without changing the running state.
 
 - [ ] **Step 4: Add camera toggle tests**
 
