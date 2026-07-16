@@ -5,12 +5,15 @@ import {
   SessionController,
   scriptedStateForElapsed,
   type SessionDependencies,
+  type SessionTelemetry,
 } from '../src/experience/session-controller.ts';
 import type { ResonanceState } from '../src/resonance/resonance.ts';
 import type { PersonalBaseline } from '../src/state/baseline-store.ts';
 
 type HarnessOptions = {
   now?: () => number;
+  cameraStartResult?: boolean;
+  cameraStart?: () => Promise<boolean>;
   baseline?: {
     load: () => Promise<PersonalBaseline | null>;
     saveSession: SessionDependencies['baseline']['saveSession'];
@@ -20,9 +23,11 @@ type HarnessOptions = {
 function createHarness(observationConfidence = 0, options: HarnessOptions = {}): {
   controller: SessionController;
   updates: ResonanceState[];
+  telemetry: SessionTelemetry[];
   calls: string[];
 } {
   const updates: ResonanceState[] = [];
+  const telemetry: SessionTelemetry[] = [];
   const calls: string[] = [];
   const dependencies: SessionDependencies = {
     renderer: {
@@ -38,7 +43,11 @@ function createHarness(observationConfidence = 0, options: HarnessOptions = {}):
       dispose: () => calls.push('audio:dispose'),
     },
     camera: {
-      start: async () => true,
+      start: async () => {
+        calls.push('camera:start');
+        if (options.cameraStart) return options.cameraStart();
+        return options.cameraStartResult ?? true;
+      },
       read: () => ({
         motion: 0.95,
         presence: 0.9,
@@ -59,8 +68,9 @@ function createHarness(observationConfidence = 0, options: HarnessOptions = {}):
     now: options.now ?? (() => 0),
     requestFrame: () => 7,
     cancelFrame: () => calls.push('frame:cancel'),
+    onTelemetry: (snapshot) => telemetry.push(snapshot),
   };
-  return { controller: new SessionController(dependencies), updates, calls };
+  return { controller: new SessionController(dependencies), updates, telemetry, calls };
 }
 
 test('scriptedStateForElapsed creates a continuous descent', () => {
@@ -170,4 +180,92 @@ test('SessionController completes teardown when calibration storage fails', asyn
   assert.ok(calls.includes('renderer:dispose'));
   assert.ok(calls.includes('audio:dispose'));
   assert.equal(controller.snapshot().running, false);
+});
+
+test('SessionController emits bounded telemetry at a readable cadence', async () => {
+  const { controller, telemetry } = createHarness(1);
+  await controller.start();
+  controller.step(0);
+  controller.step(100);
+  controller.step(250);
+
+  assert.equal(telemetry.length, 2);
+  for (const snapshot of telemetry) {
+    for (const value of Object.values(snapshot).filter((candidate) => typeof candidate === 'number')) {
+      assert.ok(value >= 0 && value <= 1);
+    }
+  }
+});
+
+test('SessionController labels unavailable sensing as scripted', async () => {
+  const { controller, telemetry } = createHarness(0);
+  await controller.start();
+  controller.step(0);
+
+  assert.equal(telemetry[0]?.source, 'scripted');
+});
+
+test('SessionController resets telemetry cadence for a restarted session', async () => {
+  const { controller, telemetry } = createHarness(1);
+  await controller.start();
+  controller.step(0);
+  await controller.stop();
+  await controller.start();
+  controller.step(0);
+
+  assert.equal(telemetry.length, 2);
+});
+
+test('camera preference releases its resource immediately', async () => {
+  const { controller, calls } = createHarness(1);
+  await controller.start();
+
+  const disabled = controller.setCameraEnabled(false);
+  assert.ok(calls.includes('camera:stop'));
+  assert.equal(await disabled, true);
+  assert.equal(controller.snapshot().running, true);
+});
+
+test('camera preference truthfully returns restoration failure', async () => {
+  const { controller, calls } = createHarness(1, { cameraStartResult: false });
+  await controller.start();
+
+  assert.equal(await controller.setCameraEnabled(true), false);
+  assert.equal(calls.filter((call) => call === 'camera:start').length, 2);
+  assert.equal(controller.snapshot().running, true);
+});
+
+test('camera preference releases a resource acquired after disabling', async () => {
+  let resolveCameraStart: (started: boolean) => void = () => {};
+  const cameraStart = new Promise<boolean>((resolve) => {
+    resolveCameraStart = resolve;
+  });
+  const { controller, calls } = createHarness(1, { cameraStart: () => cameraStart });
+  await controller.start();
+
+  assert.equal(await controller.setCameraEnabled(false), true);
+  assert.equal(calls.filter((call) => call === 'camera:stop').length, 1);
+  resolveCameraStart(true);
+  await cameraStart;
+  await Promise.resolve();
+
+  assert.equal(calls.filter((call) => call === 'camera:stop').length, 2);
+});
+
+test('camera preference stays disabled across page visibility changes', async () => {
+  const { controller, calls } = createHarness(1);
+  await controller.start();
+  await controller.setCameraEnabled(false);
+  await controller.setHidden(true);
+  await controller.setHidden(false);
+
+  assert.equal(calls.filter((call) => call === 'camera:start').length, 1);
+});
+
+test('camera preference can disable sensing before a session starts', async () => {
+  const { controller, calls } = createHarness(1);
+  await controller.setCameraEnabled(false);
+  await controller.start();
+
+  assert.equal(calls.filter((call) => call === 'camera:start').length, 0);
 });

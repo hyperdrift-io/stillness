@@ -42,6 +42,15 @@ type BaselinePort = {
   }) => Promise<unknown>;
 };
 
+export type SessionTelemetry = {
+  movement: number;
+  steadiness: number;
+  presence: number;
+  sensingQuality: number;
+  direction: 'settling' | 'holding' | 'rising';
+  source: 'sensed' | 'scripted';
+};
+
 export type SessionDependencies = {
   renderer: RendererPort;
   audio: AudioPort;
@@ -51,6 +60,7 @@ export type SessionDependencies = {
   now: () => number;
   requestFrame: (callback: FrameRequestCallback) => number;
   cancelFrame: (handle: number) => void;
+  onTelemetry?: (telemetry: SessionTelemetry) => void;
 };
 
 export type SessionSnapshot = {
@@ -91,9 +101,11 @@ export class SessionController {
   private sensorConfidence = 0;
   private personalBaseline: PersonalBaseline | null = null;
   private audioAvailable = true;
+  private cameraEnabled = true;
   private activationTotal = 0;
   private stabilityTotal = 0;
   private sampleCount = 0;
+  private lastTelemetryAt = -Infinity;
   private readonly cameraMotion = new FeatureWindow(24);
   private readonly deviceMotion = new FeatureWindow(24);
 
@@ -108,10 +120,13 @@ export class SessionController {
     this.elapsedMs = 0;
     this.pausedAt = null;
     this.phase = 'capture';
+    this.lastTelemetryAt = -Infinity;
 
     // These calls occur before the first await so browser permission and audio
     // policies see the original Begin gesture.
-    const cameraPromise = this.dependencies.camera.start();
+    const cameraPromise = this.cameraEnabled
+      ? this.dependencies.camera.start()
+      : Promise.resolve(false);
     const motionPromise = this.dependencies.motion.start();
     const audioPromise = this.dependencies.audio.start();
     const baselinePromise = this.dependencies.baseline.load();
@@ -119,7 +134,7 @@ export class SessionController {
     this.frame = this.dependencies.requestFrame(this.onFrame);
 
     void cameraPromise.then(() => {
-      if (!this.running) this.dependencies.camera.stop();
+      if (!this.running || !this.cameraEnabled) this.dependencies.camera.stop();
     }).catch(() => {});
     void motionPromise.then(() => {
       if (!this.running) this.dependencies.motion.stop();
@@ -169,6 +184,22 @@ export class SessionController {
           ),
         }
       : measured;
+    if (now - this.lastTelemetryAt >= 250 || this.lastTelemetryAt === -Infinity) {
+      const movement = clamp01(cameraWindow.mean * 0.68 + motionWindow.mean * 0.32);
+      this.dependencies.onTelemetry?.({
+        movement,
+        steadiness: clamp01(calibrated.stability),
+        presence: clamp01(calibrated.presence),
+        sensingQuality: this.sensorConfidence,
+        direction: calibrated.trend < -0.08
+          ? 'settling'
+          : calibrated.trend > 0.08
+            ? 'rising'
+            : 'holding',
+        source: this.sensorConfidence >= 0.15 ? 'sensed' : 'scripted',
+      });
+      this.lastTelemetryAt = now;
+    }
     const scripted = scriptedStateForElapsed(this.elapsedMs);
     const adaptation = this.sensorConfidence * 0.65;
     const state: StateEstimate = {
@@ -197,6 +228,13 @@ export class SessionController {
     };
   }
 
+  setCameraEnabled(enabled: boolean): Promise<boolean> {
+    this.cameraEnabled = enabled;
+    if (enabled) return this.dependencies.camera.start();
+    this.dependencies.camera.stop();
+    return Promise.resolve(true);
+  }
+
   async setHidden(hidden: boolean): Promise<void> {
     if (!this.running) return;
     if (hidden) {
@@ -211,7 +249,7 @@ export class SessionController {
     if (this.pausedAt === null) return;
     this.startTime += Math.max(0, this.dependencies.now() - this.pausedAt);
     this.pausedAt = null;
-    void this.dependencies.camera.start().catch(() => {});
+    if (this.cameraEnabled) void this.dependencies.camera.start().catch(() => {});
     void this.dependencies.motion.start().catch(() => {});
     if (this.audioAvailable) await this.dependencies.audio.resume().catch(() => {});
     this.frame = this.dependencies.requestFrame(this.onFrame);
