@@ -6,7 +6,8 @@ Create an adaptive audiovisual presence that meets the user at their current vel
 
 ## Product rules
 
-- The consumer session has no active controls after entry.
+- The canvas remains primary after entry; optional session controls stay behind the compact `?` quick menu.
+- Guided mode explains sensed changes with gentle invitations. Pure mode removes prompts and visible metrics.
 - Never expose a score, phase name, diagnosis, emotion label, streak, or achievement.
 - Missing sensor evidence lowers system confidence; it never becomes a judgment about the user.
 - Raw camera frames, audio, and motion samples stay in memory and are never transmitted or persisted.

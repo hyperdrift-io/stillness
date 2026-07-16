@@ -7,3 +7,4 @@ dist
 *.pem
 
 src/pages.gen.ts
+.superpowers/
