@@ -4,6 +4,7 @@ dist
 !.env.example
 *.tsbuildinfo
 .cache
+.worktrees/
 .DS_Store
 *.pem
 
