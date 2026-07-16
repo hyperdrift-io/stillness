@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { trackEvent } from '../analytics/events.ts';
 import { StillnessAudio } from '../audio/stillness-audio.ts';
-import { CameraSensor } from '../sensing/camera-sensor.ts';
+import { MirrorSignalAdapter } from '../sensing/mirror-signal-adapter.ts';
 import { MotionSensor } from '../sensing/motion-sensor.ts';
 import { BaselineStore } from '../state/baseline-store.ts';
 import { LightFieldRenderer } from '../visual/light-field-renderer.ts';
@@ -206,7 +206,7 @@ export function StillnessExperience() {
       controller = new SessionController({
         renderer: new LightFieldRenderer(canvas),
         audio: new StillnessAudio(),
-        camera: new CameraSensor(),
+        camera: new MirrorSignalAdapter(),
         motion: new MotionSensor(),
         baseline: baselineRef.current,
         now: () => performance.now(),

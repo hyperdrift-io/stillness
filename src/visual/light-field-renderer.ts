@@ -1,4 +1,5 @@
 import { smoothValue } from '../resonance/smoothing.ts';
+import type { SessionRenderFrame } from '../experience/model.ts';
 import type { ResonanceState } from '../resonance/resonance.ts';
 import { fragmentShaderSource, vertexShaderSource } from './shaders.ts';
 import { createUniformSnapshot } from './uniforms.ts';
@@ -51,8 +52,8 @@ export class LightFieldRenderer {
     this.animationFrame = requestAnimationFrame(this.render);
   }
 
-  update(state: ResonanceState): void {
-    this.target = { ...state };
+  update(frame: SessionRenderFrame): void {
+    this.target = { ...frame.resonance };
   }
 
   resize = (): void => {

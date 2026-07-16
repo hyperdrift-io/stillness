@@ -1,15 +1,21 @@
-import { clamp01, type RegulationPhase, type StateEstimate } from './model.ts';
+import {
+  clamp01,
+  type RegulationPhase,
+  type ReliefState,
+  type SessionRenderFrame,
+  type StateEstimate,
+} from './model.ts';
 import { phaseForElapsed } from './phase-policy.ts';
 import { targetResonance, type ResonanceState } from '../resonance/resonance.ts';
 import { FeatureWindow } from '../sensing/feature-window.ts';
-import type { CameraObservation } from '../sensing/camera-sensor.ts';
+import { initialMirrorSignal, type MirrorSignal } from '../sensing/mirror-signal.ts';
 import type { MotionObservation } from '../sensing/motion-sensor.ts';
 import type { PersonalBaseline } from '../state/baseline-store.ts';
 import { estimateReliefState } from '../state/state-estimator.ts';
 
 type RendererPort = {
   start: () => void;
-  update: (state: ResonanceState) => void;
+  update: (frame: SessionRenderFrame) => void;
   dispose: () => void;
 };
 
@@ -24,7 +30,7 @@ type AudioPort = {
 
 type CameraPort = {
   start: () => Promise<boolean>;
-  read: () => CameraObservation;
+  read: () => MirrorSignal;
   stop: () => void;
 };
 
@@ -86,8 +92,6 @@ function smoothProgress(elapsedMs: number): number {
   const linear = clamp01(elapsedMs / 180_000);
   return linear * linear * (3 - 2 * linear);
 }
-
-const neutralSoftness = 0.5;
 
 export function scriptedStateForElapsed(elapsedMs: number): StateEstimate {
   const progress = smoothProgress(elapsedMs);
@@ -165,25 +169,25 @@ export class SessionController {
   step(now: number): ResonanceState {
     this.elapsedMs = Math.max(0, now - this.startTime);
     this.phase = phaseForElapsed(this.elapsedMs);
-    const camera = this.dependencies.camera.read();
+    const mirror = this.cameraEnabled ? this.dependencies.camera.read() : initialMirrorSignal;
     const motion = this.dependencies.motion.read();
-    this.cameraMotion.push(camera.motion, now);
+    this.cameraMotion.push(mirror.motion, now);
     this.deviceMotion.push(motion.motion, now);
     const cameraWindow = this.cameraMotion.snapshot();
     const motionWindow = this.deviceMotion.snapshot();
     const elapsedProgress = smoothProgress(this.elapsedMs);
 
     this.sensorConfidence = clamp01(
-      1 - (1 - camera.confidence * 0.75) * (1 - motion.confidence * 0.25),
+      1 - (1 - mirror.confidence * 0.82) * (1 - motion.confidence * 0.18),
     );
     const measured = estimateReliefState({
       cameraMotion: cameraWindow.mean,
-      cameraPresence: camera.presence,
+      cameraPresence: mirror.presence,
       deviceMotion: motionWindow.mean,
       variability: clamp01(Math.sqrt(cameraWindow.variance + motionWindow.variance)),
       settlingTrend: Math.max(-1, Math.min(1, -(cameraWindow.slopePerSecond + motionWindow.slopePerSecond) * 4)),
-      expressionActivity: 0,
-      softness: neutralSoftness,
+      expressionActivity: mirror.expressionActivity,
+      softness: mirror.softness,
       confidence: this.sensorConfidence,
       elapsedProgress,
     });
@@ -207,7 +211,7 @@ export class SessionController {
             presence: scripted.presence,
             sensingQuality: this.sensorConfidence,
             expressionActivity: 0,
-            softness: neutralSoftness,
+            softness: 0,
             turbulence: 1 - scripted.stability,
             settling: scripted.stability,
             relief: elapsedProgress,
@@ -218,8 +222,8 @@ export class SessionController {
           }
         : {
             movement: measured.motion,
-            steadiness: clamp01(calibrated.stability),
-            presence: clamp01(calibrated.presence),
+            steadiness: calibrated.stability,
+            presence: calibrated.presence,
             sensingQuality: this.sensorConfidence,
             expressionActivity: measured.expressionActivity,
             softness: measured.softness,
@@ -233,7 +237,7 @@ export class SessionController {
               : calibrated.trend < -0.08
                 ? 'rising'
                 : 'holding',
-            source: camera.confidence >= 0.15 ? 'mirror' : 'pure',
+            source: mirror.mode === 'mirror' && mirror.topology ? 'mirror' : 'pure',
           };
       this.dependencies.onTelemetry?.(telemetry);
       this.lastTelemetryAt = now;
@@ -247,7 +251,18 @@ export class SessionController {
       confidence: 1,
     };
     const resonance = targetResonance(state, this.phase);
-    this.dependencies.renderer.update(resonance);
+    const relief = {
+      ...calibrated,
+      motion: measured.motion,
+      expressionActivity: measured.expressionActivity,
+      softness: measured.softness,
+      turbulence: measured.turbulence,
+      settling: measured.settling,
+      relief: measured.relief,
+      readiness: measured.readiness,
+    } satisfies ReliefState;
+    const frame: SessionRenderFrame = { resonance, relief, mirror };
+    this.dependencies.renderer.update(frame);
     if (this.audioAvailable) this.dependencies.audio.update(resonance, this.elapsedMs / 1_000);
 
     this.activationTotal += calibrated.activation;
