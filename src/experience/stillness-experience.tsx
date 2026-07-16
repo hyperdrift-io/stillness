@@ -88,7 +88,11 @@ export function StillnessExperience() {
   ) => {
     if (preference === 'mode') return;
 
-    setPreferences((current) => ({ ...current, [preference]: enabled }));
+    setPreferences((current) => ({
+      ...current,
+      [preference]: enabled,
+      ...(preference === 'camera' ? { mode: enabled ? 'mirror' : 'pure' } : {}),
+    }));
     trackEvent('session_preference_changed', { preference, enabled });
 
     if (preference === 'sound') {
@@ -283,7 +287,7 @@ export function StillnessExperience() {
             A private soul mirror responds to presence, movement, and expression signals
             so you can recover your center and rebuild readiness.
           </p>
-          <fieldset className="entry-options">
+          <fieldset className="entry-options" disabled={mode === 'starting'}>
             <legend>Begin with</legend>
             <label className="mode-choice">
               <input
@@ -316,6 +320,7 @@ export function StillnessExperience() {
             <input
               type="checkbox"
               checked={preferences.guidance}
+              disabled={mode === 'starting'}
               onChange={(event) => setPreferences((current) => ({
                 ...current,
                 guidance: event.currentTarget.checked,
@@ -327,6 +332,7 @@ export function StillnessExperience() {
             <input
               type="checkbox"
               checked={preferences.sound}
+              disabled={mode === 'starting'}
               onChange={(event) => setPreferences((current) => ({
                 ...current,
                 sound: event.currentTarget.checked,
