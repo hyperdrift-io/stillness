@@ -397,8 +397,13 @@ git commit -m "feat: add guided session controls"
 ### Task 6: Orchestrate Guided and Pure Modes
 
 **Files:**
+- Modify: `src/experience/guidance-policy.ts`
+- Modify: `src/experience/session-guidance.tsx`
+- Modify: `src/experience/session-menu.tsx`
 - Modify: `src/experience/stillness-experience.tsx`
 - Modify: `src/styles.css`
+- Modify: `tests/guidance-policy.test.ts`
+- Modify: `tests/session-ui-contract.test.ts`
 - Modify: `tests/pwa-assets.test.ts`
 - Create: `tests/stillness-experience-contract.test.ts`
 
@@ -436,6 +441,21 @@ Expected: FAIL because the approved content and components are absent.
 Store `preferences`, `telemetry`, `cue`, `menuOpen`, and `audioAvailable`. Keep one `GuidancePolicy` ref. Pass `onTelemetry` to the controller; update React at the controller’s four-Hz cadence, then evaluate guidance. Reset the policy and visible state for each Begin and Leave.
 
 The Guided checkbox updates only `preferences.guidance` before Begin. Begin creates the controller from the current preferences, starts audio automatically, disables camera immediately when requested, and begins in Guided or Pure presentation accordingly.
+
+Extend each `GuidanceCue` with the explanation below and render the cue as: `cue.label` in the signal label, `cue.invitation` as the heading, and `cue.explanation` below it. This is what makes the detected change and the field response legible; never replace the signal label with the generic word “Guidance.”
+
+```ts
+const cueExplanations = {
+  active: 'The field is holding more energy while movement stays active.',
+  settling: 'The field is making more space as movement becomes steadier.',
+  steady: 'The field is smoothing into a more even rhythm.',
+  quiet: 'The field is reducing detail as movement stays quiet.',
+  changing: 'The field is widening to meet the change.',
+  scripted: 'The field is following its gentle descent while sensing is unavailable.',
+} as const;
+```
+
+Add `className="session-menu"` to the native dialog for its semantic layout role.
 
 - [ ] **Step 4: Implement keyboard and touch interactions**
 
