@@ -39,11 +39,14 @@ function copyFor(telemetry: SessionTelemetry): { label: string; invitation: stri
   return { label: cue.label, invitation: cue.invitation };
 }
 
-test('low-confidence telemetry stays honest', () => {
-  assert.deepEqual(copyFor(scriptedTelemetry), {
-    label: 'Following a gentle rhythm',
-    invitation: 'Unclench the jaw and allow the shoulders to drop.',
-  });
+test('scripted source uses the honest fallback despite sensed-looking values', () => {
+  assert.deepEqual(
+    copyFor({ ...scriptedTelemetry, movement: 0.9, direction: 'rising' }),
+    {
+      label: 'Following a gentle rhythm',
+      invitation: 'Unclench the jaw and allow the shoulders to drop.',
+    },
+  );
 });
 
 test('settling movement invites a longer exhale', () => {
@@ -51,6 +54,16 @@ test('settling movement invites a longer exhale', () => {
     label: 'Movement is settling',
     invitation: 'Let the next exhale take a little longer.',
   });
+});
+
+test('settling direction takes precedence above the active movement threshold', () => {
+  assert.deepEqual(
+    copyFor({ ...activeTelemetry, movement: 0.9, direction: 'settling' }),
+    {
+      label: 'Movement is settling',
+      invitation: 'Let the next exhale take a little longer.',
+    },
+  );
 });
 
 test('active movement uses the approved grounding cue', () => {
@@ -81,6 +94,46 @@ test('rising movement describes change without judgment', () => {
   });
 });
 
+test('rising direction takes precedence above the active movement threshold', () => {
+  assert.deepEqual(
+    copyFor({ ...activeTelemetry, movement: 0.9, direction: 'rising' }),
+    {
+      label: 'The rhythm is changing',
+      invitation: 'Let the field meet the change; nothing needs correcting.',
+    },
+  );
+});
+
+test('active movement starts exactly at 0.58', () => {
+  assert.equal(
+    copyFor({ ...sensedTelemetry, movement: 0.579_999 }).label,
+    'A steadier rhythm is forming',
+  );
+  assert.equal(copyFor({ ...sensedTelemetry, movement: 0.58 }).label, 'Movement has energy');
+});
+
+test('quiet movement ends exactly at 0.20', () => {
+  assert.equal(
+    copyFor({ ...quietTelemetry, movement: 0.2 }).label,
+    'The field has become quieter',
+  );
+  assert.equal(
+    copyFor({ ...quietTelemetry, movement: 0.200_001 }).label,
+    'A steadier rhythm is forming',
+  );
+});
+
+test('quiet steadiness starts exactly at 0.70', () => {
+  assert.equal(
+    copyFor({ ...quietTelemetry, steadiness: 0.699_999 }).label,
+    'A steadier rhythm is forming',
+  );
+  assert.equal(
+    copyFor({ ...quietTelemetry, steadiness: 0.7 }).label,
+    'The field has become quieter',
+  );
+});
+
 test('a cue is not replaced before its minimum display duration', () => {
   const policy = new GuidancePolicy();
   const first = policy.evaluate(activeTelemetry, 0);
@@ -90,11 +143,12 @@ test('a cue is not replaced before its minimum display duration', () => {
   assert.equal(policy.evaluate(quietTelemetry, 7_000)?.label, 'The field has become quieter');
 });
 
-test('guidance fades after the opening window when signals do not change', () => {
+test('guidance remains through 26 seconds and fades one millisecond later', () => {
   const policy = new GuidancePolicy();
-  policy.evaluate(sensedTelemetry, 0);
+  const first = policy.evaluate(sensedTelemetry, 0);
 
-  assert.equal(policy.evaluate(sensedTelemetry, 30_001), null);
+  assert.equal(policy.evaluate(sensedTelemetry, 26_000)?.id, first?.id);
+  assert.equal(policy.evaluate(sensedTelemetry, 26_001), null);
 });
 
 test('a changed cue can reappear after the opening window and remains readable', () => {
