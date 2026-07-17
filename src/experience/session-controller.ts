@@ -57,6 +57,7 @@ export type SessionTelemetry = {
   presence: number;
   sensingQuality: number;
   expressionActivity: number;
+  expression: MirrorSignal['expression'];
   softness: number;
   turbulence: number;
   settling: number;
@@ -235,6 +236,7 @@ export class SessionController {
             presence: scripted.presence,
             sensingQuality: this.sensorConfidence,
             expressionActivity: 0,
+            expression: initialMirrorSignal.expression,
             softness: 0.5,
             turbulence: 1 - scripted.stability,
             settling: scripted.stability,
@@ -250,6 +252,7 @@ export class SessionController {
             presence: calibrated.presence,
             sensingQuality: this.sensorConfidence,
             expressionActivity: measured.expressionActivity,
+            expression: mirror.expression,
             softness: measured.softness,
             turbulence: measured.turbulence,
             settling: measured.settling,

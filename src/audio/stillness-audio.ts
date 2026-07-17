@@ -129,6 +129,7 @@ export class StillnessAudio {
       context.currentTime + 1.8,
     );
     if (context.state === 'suspended') await context.resume();
+    this.playEntryTone(context);
   }
 
   update(state: ResonanceState, _elapsedSeconds: number): void {
@@ -225,6 +226,32 @@ export class StillnessAudio {
       channel[index] = previous * 3.2;
     }
     return buffer;
+  }
+
+  private playEntryTone(context: AudioContext): void {
+    if (!this.audible || context.state === 'closed') return;
+    const now = context.currentTime;
+    const tone = context.createOscillator();
+    const overtone = context.createOscillator();
+    const gain = context.createGain();
+    const overtoneGain = context.createGain();
+    tone.type = 'sine';
+    overtone.type = 'triangle';
+    tone.frequency.setValueAtTime(220, now);
+    overtone.frequency.setValueAtTime(330, now);
+    gain.gain.setValueAtTime(SILENT_GAIN, now);
+    gain.gain.exponentialRampToValueAtTime(0.045, now + 0.08);
+    gain.gain.exponentialRampToValueAtTime(SILENT_GAIN, now + 1.15);
+    overtoneGain.gain.setValueAtTime(0.18, now);
+    overtoneGain.gain.exponentialRampToValueAtTime(0.02, now + 1.05);
+    tone.connect(gain);
+    overtone.connect(overtoneGain);
+    overtoneGain.connect(gain);
+    gain.connect(context.destination);
+    tone.start(now);
+    overtone.start(now + 0.02);
+    tone.stop(now + 1.2);
+    overtone.stop(now + 1.2);
   }
 
   private setTarget(

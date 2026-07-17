@@ -8,7 +8,7 @@ import {
   type SessionTelemetry,
 } from '../src/experience/session-controller.ts';
 import type { ResonanceState } from '../src/resonance/resonance.ts';
-import { initialMirrorSignal, type MirrorSignal } from '../src/sensing/mirror-signal.ts';
+import { initialMirrorSignal, neutralMirrorExpression, type MirrorSignal } from '../src/sensing/mirror-signal.ts';
 import type { PersonalBaseline } from '../src/state/baseline-store.ts';
 
 type HarnessOptions = {
@@ -263,6 +263,7 @@ test('SessionController publishes safe scripted telemetry when sensing confidenc
     presence: scripted.presence,
     sensingQuality: 0,
     expressionActivity: 0,
+    expression: neutralMirrorExpression,
     softness: 0.5,
     turbulence: 1 - scripted.stability,
     settling: scripted.stability,

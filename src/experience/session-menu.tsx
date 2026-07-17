@@ -61,6 +61,12 @@ export function expressionLabel(value: number): 'soft' | 'moving' | 'active' {
   return 'active';
 }
 
+export function expressionChannelLabel(value: number): 'quiet' | 'visible' | 'driving' {
+  if (value < 0.14) return 'quiet';
+  if (value < 0.48) return 'visible';
+  return 'driving';
+}
+
 export function reliefLabel(value: number): 'forming' | 'arriving' | 'clear' {
   if (value < 0.35) return 'forming';
   if (value < 0.72) return 'arriving';
@@ -199,6 +205,11 @@ export function SessionMenu({
           {[
             ['movement', 'Movement', telemetry.movement, movementLabel(telemetry.movement, telemetry.direction)],
             ['expression', 'Expression signals', telemetry.expressionActivity, expressionLabel(telemetry.expressionActivity)],
+            ['mouth-open', 'Mouth opening', telemetry.expression.mouthOpen, expressionChannelLabel(telemetry.expression.mouthOpen)],
+            ['mouth-smile', 'Mouth lift', telemetry.expression.mouthSmile, expressionChannelLabel(telemetry.expression.mouthSmile)],
+            ['brow-lift', 'Brow lift', telemetry.expression.browLift, expressionChannelLabel(telemetry.expression.browLift)],
+            ['brow-tension', 'Brow tension', telemetry.expression.browTension, expressionChannelLabel(telemetry.expression.browTension)],
+            ['eye-closure', 'Eye closure', telemetry.expression.eyeClosure, expressionChannelLabel(telemetry.expression.eyeClosure)],
             ['turbulence', 'Turbulence', telemetry.turbulence, telemetry.direction === 'rising' ? 'rising' : 'settling'],
             ['settling', 'Settling', telemetry.settling, steadinessLabel(telemetry.settling)],
             ['relief', 'Relief', telemetry.relief, reliefLabel(telemetry.relief)],

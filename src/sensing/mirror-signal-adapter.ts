@@ -1,12 +1,15 @@
 import { clamp01 } from '../experience/model.ts';
 import {
   createFaceLandmarkerClient,
+  faceLandmarkConnections,
   type FaceLandmarkerClient,
   type FaceLandmarkerResult,
 } from './face-landmarker-client.ts';
 import {
   initialMirrorSignal,
+  neutralMirrorExpression,
   type MirrorPoint,
+  type MirrorExpression,
   type MirrorSignal,
   type MirrorTopology,
 } from './mirror-signal.ts';
@@ -102,7 +105,11 @@ export class MirrorSignalAdapter {
     return {
       ...this.latest,
       topology: this.latest.topology
-        ? { ...this.latest.topology, points: this.latest.topology.points.map((point) => ({ ...point })) }
+        ? {
+          ...this.latest.topology,
+          points: this.latest.topology.points.map((point) => ({ ...point })),
+          connections: this.latest.topology.connections.map((connection) => ({ ...connection })),
+        }
         : null,
     };
   }
@@ -162,15 +169,24 @@ export class MirrorSignalAdapter {
         confidence: frameFeatures.confidence,
         luminance: frameFeatures.luminance,
         expressionActivity: 0,
+        expression: neutralMirrorExpression,
         softness: 0,
         topology: null,
       };
     }
 
     const topology = this.createTopology(result);
-    const expressionActivity = this.measureExpressionActivity(result);
+    const expression = this.measureExpression(result);
+    const expressionActivity = expression.activity;
     const headMotion = this.measureHeadMotion(topology);
-    const motion = clamp01(frameFeatures.motion * 0.42 + headMotion * 0.38 + expressionActivity * 0.2);
+    const expressionEnergy = clamp01(
+      expressionActivity * 0.42
+      + expression.mouthOpen * 0.22
+      + expression.browTension * 0.18
+      + expression.eyeClosure * 0.08
+      + expression.browLift * 0.06,
+    );
+    const motion = clamp01(frameFeatures.motion * 0.36 + headMotion * 0.32 + expressionEnergy * 0.32);
     const confidence = clamp01(frameFeatures.confidence * 0.35 + 0.65);
 
     return {
@@ -181,7 +197,8 @@ export class MirrorSignalAdapter {
       confidence,
       luminance: frameFeatures.luminance,
       expressionActivity,
-      softness: clamp01(1 - expressionActivity * 1.4 - headMotion * 0.8),
+      expression,
+      softness: clamp01(1 - expressionEnergy * 1.15 - headMotion * 0.62 + expression.mouthSmile * 0.16),
       topology,
     };
   }
@@ -249,6 +266,7 @@ export class MirrorSignalAdapter {
 
     return {
       points,
+      connections: faceLandmarkConnections(),
       centerX,
       centerY,
       scale,
@@ -258,20 +276,41 @@ export class MirrorSignalAdapter {
     };
   }
 
-  private measureExpressionActivity(result: FaceLandmarkerResult): number {
+  private measureExpression(result: FaceLandmarkerResult): MirrorExpression {
     const categories = result.faceBlendshapes[0]?.categories ?? [];
-    if (categories.length === 0) return 0;
+    if (categories.length === 0) return neutralMirrorExpression;
+    const scores = new Map<string, number>();
     let total = 0;
     let count = 0;
     for (const category of categories) {
-      const name = category.categoryName;
+      const name = category.categoryName.toLowerCase();
       const score = clamp01(category.score);
       const previous = this.previousBlendshapes.get(name) ?? score;
       total += Math.abs(score - previous);
       count += 1;
       this.previousBlendshapes.set(name, score);
+      scores.set(name, score);
     }
-    return clamp01((total / Math.max(1, count)) * 12);
+
+    const average = (...names: string[]): number => {
+      let sum = 0;
+      let matches = 0;
+      for (const [name, score] of scores) {
+        if (!names.some((candidate) => name.includes(candidate))) continue;
+        sum += score;
+        matches += 1;
+      }
+      return clamp01(sum / Math.max(1, matches));
+    };
+
+    return {
+      activity: clamp01((total / Math.max(1, count)) * 12),
+      mouthOpen: average('jawopen', 'mouthopen', 'mouthfunnel', 'mouthpucker'),
+      mouthSmile: average('mouthsmile', 'cheeksquint'),
+      browLift: average('browinnerup', 'browouterup'),
+      browTension: average('browdown', 'mouthfrown', 'mouthshrug'),
+      eyeClosure: average('eyeblink', 'eyesquint'),
+    };
   }
 
   private measureHeadMotion(topology: MirrorTopology): number {

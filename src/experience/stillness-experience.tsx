@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { trackEvent } from '../analytics/events.ts';
 import { StillnessAudio } from '../audio/stillness-audio.ts';
+import { neutralMirrorExpression } from '../sensing/mirror-signal.ts';
 import { MirrorSignalAdapter } from '../sensing/mirror-signal-adapter.ts';
 import { MotionSensor } from '../sensing/motion-sensor.ts';
 import { BaselineStore } from '../state/baseline-store.ts';
@@ -30,6 +31,7 @@ const initialTelemetry: SessionTelemetry = {
   presence: 0,
   sensingQuality: 0,
   expressionActivity: 0,
+  expression: neutralMirrorExpression,
   softness: 0,
   turbulence: 0,
   settling: 0,

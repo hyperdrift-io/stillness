@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { GuidancePolicy } from '../src/experience/guidance-policy.ts';
 import type { SessionTelemetry } from '../src/experience/session-controller.ts';
+import { neutralMirrorExpression } from '../src/sensing/mirror-signal.ts';
 
 const mirrorTelemetry: SessionTelemetry = {
   movement: 0.4,
@@ -10,6 +11,7 @@ const mirrorTelemetry: SessionTelemetry = {
   presence: 0.8,
   sensingQuality: 0.9,
   expressionActivity: 0.2,
+  expression: neutralMirrorExpression,
   softness: 0.4,
   turbulence: 0.5,
   settling: 0.3,
@@ -26,6 +28,7 @@ const scriptedTelemetry: SessionTelemetry = {
   presence: 0.8,
   sensingQuality: 0,
   expressionActivity: 0,
+  expression: neutralMirrorExpression,
   softness: 0.5,
   turbulence: 0.1,
   settling: 0.9,

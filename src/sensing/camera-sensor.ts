@@ -1,5 +1,5 @@
 import { clamp01 } from '../experience/model.ts';
-import { initialMirrorSignal, type MirrorSignal } from './mirror-signal.ts';
+import { initialMirrorSignal, neutralMirrorExpression, type MirrorSignal } from './mirror-signal.ts';
 
 export type CameraObservation = MirrorSignal;
 
@@ -123,6 +123,7 @@ export class CameraSensor {
       confidence,
       luminance: mean,
       expressionActivity: 0,
+      expression: neutralMirrorExpression,
       softness: clamp01(1 - motion),
       topology: null,
     };
