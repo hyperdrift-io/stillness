@@ -85,29 +85,41 @@ export function StillnessExperience() {
 
   const togglePreference = useCallback((
     preference: keyof SessionPreferences,
-    enabled: boolean,
+    enabled: boolean | SessionPreferences['mode'],
   ) => {
-    if (preference === 'mode') return;
+    if (preference === 'mode') {
+      const nextMode = enabled === 'mirror' ? 'mirror' : 'pure';
+      setPreferences((current) => ({
+        ...current,
+        mode: nextMode,
+        camera: nextMode === 'mirror',
+      }));
+      trackEvent('session_preference_changed', { preference, enabled: nextMode });
+      if (nextMode === 'pure') void controllerRef.current?.setCameraEnabled(false);
+      if (nextMode === 'mirror') void controllerRef.current?.setCameraEnabled(true);
+      return;
+    }
 
+    const nextEnabled = Boolean(enabled);
     setPreferences((current) => ({
       ...current,
-      [preference]: enabled,
-      ...(preference === 'camera' ? { mode: enabled ? 'mirror' : 'pure' } : {}),
+      [preference]: nextEnabled,
+      ...(preference === 'camera' ? { mode: nextEnabled ? 'mirror' : 'pure' } : {}),
     }));
-    trackEvent('session_preference_changed', { preference, enabled });
+    trackEvent('session_preference_changed', { preference, enabled: nextEnabled });
 
     if (preference === 'sound') {
       const controller = controllerRef.current;
       const token = controllerTokenRef.current;
-      void controller?.setSoundEnabled(enabled).then((available) => {
+      void controller?.setSoundEnabled(nextEnabled).then((available) => {
         if (token !== null && transitionsRef.current.owns(token)) {
           setAudioAvailable(available);
         }
       });
     } else if (preference === 'camera') {
-      void controllerRef.current?.setCameraEnabled(enabled);
+      void controllerRef.current?.setCameraEnabled(nextEnabled);
     } else if (preference === 'guidance') {
-      if (enabled) {
+      if (nextEnabled) {
         guidancePolicyRef.current.reset();
         const elapsedMs = controllerRef.current?.snapshot().elapsedMs ?? 0;
         setCue(guidancePolicyRef.current.evaluate(telemetry, elapsedMs));

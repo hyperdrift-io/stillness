@@ -7,6 +7,7 @@ import type { SessionPreferences } from './session-preferences.ts';
 type TelemetryDirection = SessionTelemetry['direction'];
 type TelemetrySource = SessionTelemetry['source'];
 type Preference = keyof SessionPreferences;
+type PreferenceValue = boolean | SessionPreferences['mode'];
 type DialogLifecycle = Pick<HTMLDialogElement, 'close' | 'open'>;
 type FocusTarget = Pick<HTMLElement, 'focus'>;
 
@@ -16,7 +17,7 @@ type SessionMenuProps = {
   audioAvailable: boolean;
   open: boolean;
   triggerRef: RefObject<HTMLElement | null>;
-  onToggle: (preference: Preference, enabled: boolean) => void;
+  onToggle: (preference: Preference, enabled: PreferenceValue) => void;
   onClose: () => void;
   onLeave: () => void;
 };
@@ -52,6 +53,24 @@ export function sensingLabel(
   if (source === 'scripted') return 'unavailable';
   if (value < 0.5) return 'limited';
   return 'clear';
+}
+
+export function expressionLabel(value: number): 'soft' | 'moving' | 'active' {
+  if (value < 0.18) return 'soft';
+  if (value < 0.52) return 'moving';
+  return 'active';
+}
+
+export function reliefLabel(value: number): 'forming' | 'arriving' | 'clear' {
+  if (value < 0.35) return 'forming';
+  if (value < 0.72) return 'arriving';
+  return 'clear';
+}
+
+export function readinessLabel(value: number): 'restoring' | 'returning' | 'readying' {
+  if (value < 0.35) return 'restoring';
+  if (value < 0.72) return 'returning';
+  return 'readying';
 }
 
 export function closeOpenDialogAndRestoreFocus(
@@ -113,6 +132,24 @@ export function SessionMenu({
         <legend>Experience</legend>
         <label>
           <input
+            type="radio"
+            name="active-session-mode"
+            checked={preferences.mode === 'mirror'}
+            onChange={() => onToggle('mode', 'mirror')}
+          />
+          <span>Mirror</span>
+        </label>
+        <label>
+          <input
+            type="radio"
+            name="active-session-mode"
+            checked={preferences.mode === 'pure'}
+            onChange={() => onToggle('mode', 'pure')}
+          />
+          <span>Pure</span>
+        </label>
+        <label>
+          <input
             type="checkbox"
             role="switch"
             checked={preferences.guidance}
@@ -159,68 +196,23 @@ export function SessionMenu({
       {preferences.liveSignals ? (
         <section aria-labelledby="live-signals-title">
           <h3 id="live-signals-title">Live signals</h3>
-          <p>
-            <span id="movement-metric-name">Movement</span>
-            <meter
-              className="signal-meter"
-              min="0"
-              max="1"
-              aria-labelledby="movement-metric-name"
-              aria-describedby="movement-metric-state"
-              value={telemetry.movement}
-            >
-              Movement
-            </meter>
-            <span id="movement-metric-state">
-              {movementLabel(telemetry.movement, telemetry.direction)}
-            </span>
-          </p>
-          <p>
-            <span id="steadiness-metric-name">Steadiness</span>
-            <meter
-              className="signal-meter"
-              min="0"
-              max="1"
-              aria-labelledby="steadiness-metric-name"
-              aria-describedby="steadiness-metric-state"
-              value={telemetry.steadiness}
-            >
-              Steadiness
-            </meter>
-            <span id="steadiness-metric-state">{steadinessLabel(telemetry.steadiness)}</span>
-          </p>
-          <p>
-            <span id="presence-metric-name">Presence</span>
-            <meter
-              className="signal-meter"
-              min="0"
-              max="1"
-              aria-labelledby="presence-metric-name"
-              aria-describedby="presence-metric-state"
-              value={telemetry.presence}
-            >
-              Presence
-            </meter>
-            <span id="presence-metric-state">
-              {presenceLabel(telemetry.presence, telemetry.source)}
-            </span>
-          </p>
-          <p>
-            <span id="sensing-metric-name">Sensing</span>
-            <meter
-              className="signal-meter"
-              min="0"
-              max="1"
-              aria-labelledby="sensing-metric-name"
-              aria-describedby="sensing-metric-state"
-              value={telemetry.sensingQuality}
-            >
-              Sensing
-            </meter>
-            <span id="sensing-metric-state">
-              {sensingLabel(telemetry.sensingQuality, telemetry.source)}
-            </span>
-          </p>
+          {[
+            ['Movement', telemetry.movement, movementLabel(telemetry.movement, telemetry.direction)],
+            ['Expression', telemetry.expressionActivity, expressionLabel(telemetry.expressionActivity)],
+            ['Turbulence', telemetry.turbulence, telemetry.direction === 'rising' ? 'rising' : 'settling'],
+            ['Settling', telemetry.settling, steadinessLabel(telemetry.settling)],
+            ['Relief', telemetry.relief, reliefLabel(telemetry.relief)],
+            ['Readiness', telemetry.readiness, readinessLabel(telemetry.readiness)],
+            ['Signal', telemetry.confidence, sensingLabel(telemetry.confidence, telemetry.source)],
+          ].map(([name, value, state]) => (
+            <p key={name}>
+              <span>{name}</span>
+              <meter className="signal-meter" min="0" max="1" value={Number(value)}>
+                {name}
+              </meter>
+              <span>{state}</span>
+            </p>
+          ))}
         </section>
       ) : null}
 

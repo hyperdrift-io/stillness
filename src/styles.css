@@ -368,7 +368,7 @@
   }
   dialog.session-menu section p {
     display: grid;
-    grid-template-columns: 5rem 1fr 4.5rem;
+    grid-template-columns: 5.75rem 1fr 5rem;
     align-items: center;
     gap: var(--space-xs);
     color: var(--color-muted);
