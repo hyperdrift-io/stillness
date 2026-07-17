@@ -16,6 +16,7 @@ export type MirrorTopology = {
 
 export type MirrorSignal = {
   mode: 'mirror' | 'pure';
+  sourceVideo: HTMLVideoElement | null;
   motion: number;
   presence: number;
   confidence: number;
@@ -27,6 +28,7 @@ export type MirrorSignal = {
 
 export const initialMirrorSignal: MirrorSignal = Object.freeze({
   mode: 'pure',
+  sourceVideo: null,
   motion: 0,
   presence: 0,
   confidence: 0,

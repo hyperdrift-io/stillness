@@ -37,4 +37,4 @@ pnpm run build
 
 ## Prototype loop
 
-Stillness remains in discovery until the user explicitly promotes it to hardening. Do not add, expand, or run automated test suites by default. Make the smallest coherent change, run fast deploy-safety checks, deploy to `https://stillness.hyperdrift.io`, then pause for user feedback before choosing another significant product change.
+Stillness remains in discovery until the user explicitly promotes it to hardening. Do not add, expand, or run automated test suites by default. Make the smallest coherent change, run fast deploy-safety checks, expose a local/dev test build, then pause for user feedback before choosing another significant product change. Do not deploy untested prototype changes to `https://stillness.hyperdrift.io` unless the user explicitly confirms production is the test target or says to deploy to production.

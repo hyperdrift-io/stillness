@@ -10,7 +10,7 @@ export type SessionPreferences = {
 
 export const defaultSessionPreferences: SessionPreferences = Object.freeze({
   mode: 'mirror',
-  guidance: true,
+  guidance: false,
   sound: true,
   liveSignals: false,
   camera: true,

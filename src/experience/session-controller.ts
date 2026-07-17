@@ -49,6 +49,8 @@ type BaselinePort = {
   }) => Promise<unknown>;
 };
 
+const CAMERA_START_TIMEOUT_MS = 6_000;
+
 export type SessionTelemetry = {
   movement: number;
   steadiness: number;
@@ -356,10 +358,21 @@ export class SessionController {
   }
 
   private startCamera(): Promise<boolean> {
-    return this.dependencies.camera.start().then((started) => {
+    let timedOut = false;
+    const timeout = new Promise<boolean>((resolve) => {
+      globalThis.setTimeout(() => {
+        timedOut = true;
+        resolve(false);
+      }, CAMERA_START_TIMEOUT_MS);
+    });
+    const start = this.dependencies.camera.start().then((started) => {
       if (!this.running || !this.cameraEnabled || this.pausedAt !== null) {
         this.dependencies.camera.stop();
       }
+      return started;
+    });
+    return Promise.race([start, timeout]).then((started) => {
+      if (timedOut || !started) this.dependencies.camera.stop();
       return started;
     });
   }

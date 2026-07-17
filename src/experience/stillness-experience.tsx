@@ -19,9 +19,10 @@ import {
   type SessionPreferences,
 } from './session-preferences.ts';
 
-type ExperienceMode = 'ready' | 'starting' | 'active' | 'error';
+type ExperienceMode = 'ready' | 'starting' | 'calibrating' | 'active' | 'error';
 
 const cameraUnavailableMessage = 'Pure is open. Mirror needs camera permission and can be enabled from ?.';
+const CALIBRATION_DISPLAY_MS = 1_600;
 
 const initialTelemetry: SessionTelemetry = {
   movement: 0,
@@ -42,6 +43,15 @@ const initialTelemetry: SessionTelemetry = {
 function isEditableTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement
     && (target.isContentEditable || target.matches('input, textarea, select'));
+}
+
+function mirrorProgressLabel(telemetry: SessionTelemetry): string {
+  if (telemetry.source === 'scripted') return 'Finding a gentle rhythm';
+  if (telemetry.readiness >= 0.68) return 'Readiness returning';
+  if (telemetry.relief >= 0.68) return 'Stillness deepening';
+  if (telemetry.relief >= 0.42) return 'Relief arriving';
+  if (telemetry.direction === 'settling' || telemetry.softness >= 0.52) return 'Signals softening';
+  return 'Meeting your rhythm';
 }
 
 export function StillnessExperience() {
@@ -149,7 +159,9 @@ export function StillnessExperience() {
   }, [fallBackToPure, telemetry]);
 
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
+    const localDevelopment = window.location.hostname === 'localhost'
+      || window.location.hostname === '127.0.0.1';
+    if ('serviceWorker' in navigator && !localDevelopment) {
       void navigator.serviceWorker.register('/sw.js').then(async () => {
         const registration = await navigator.serviceWorker.ready;
         const urls = performance.getEntriesByType('resource')
@@ -160,6 +172,10 @@ export function StillnessExperience() {
       }).catch(() => {
         // The experience remains available online when registration is blocked.
       });
+    } else if ('serviceWorker' in navigator && localDevelopment) {
+      void navigator.serviceWorker.getRegistrations()
+        .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+        .catch(() => {});
     }
     return () => {
       const controller = controllerRef.current;
@@ -275,16 +291,24 @@ export function StillnessExperience() {
         : preferences;
       if (requestedCamera && !startResult.cameraStarted) fallBackToPure(token);
       const available = await controller.setSoundEnabled(preferences.sound);
-      transitionsRef.current.activate(token, () => {
-        setAudioAvailable(available);
-        setMode('active');
-        trackEvent('session_started', {
-          mode: startedPreferences.mode,
-          guidance: preferences.guidance,
-          sound: preferences.sound,
-          camera: startedPreferences.camera,
+      setMode('calibrating');
+      setMessage(startedPreferences.camera
+        ? 'Calibrating the mirror. Let your face settle into the field.'
+        : 'Camera was not available. Opening the pure reset.');
+      globalThis.setTimeout(() => {
+        if (!transitionsRef.current.owns(token)) return;
+        transitionsRef.current.activate(token, () => {
+          setAudioAvailable(available);
+          setMode('active');
+          setMessage('');
+          trackEvent('session_started', {
+            mode: startedPreferences.mode,
+            guidance: preferences.guidance,
+            sound: preferences.sound,
+            camera: startedPreferences.camera,
+          });
         });
-      });
+      }, startedPreferences.camera ? CALIBRATION_DISPLAY_MS : 650);
     } catch {
       await controller?.stop();
       transitionsRef.current.fail(token, () => {
@@ -295,15 +319,6 @@ export function StillnessExperience() {
         setMessage('This browser could not open the soul mirror. A current browser can open it.');
         setMode('error');
       });
-    }
-  }
-
-  async function clearCalibration(): Promise<void> {
-    try {
-      await baselineRef.current.clear();
-      setMessage('Local calibration cleared. Your next session can begin fresh.');
-    } catch {
-      setMessage('This browser could not clear local calibration. You can still begin normally.');
     }
   }
 
@@ -320,99 +335,49 @@ export function StillnessExperience() {
         <div className="entry-presence" aria-hidden="true" />
         <div className="entry-copy">
           <p className="eyebrow">Relief</p>
-          <h1 id="stillness-title">Reset now. Return stronger.</h1>
+          <h1 id="stillness-title">Reset now.</h1>
           <p>
-            A private soul mirror responds to presence, movement, and expression signals
-            so you can recover your center and rebuild readiness.
+            Open a private mirror that turns your live image into a quiet field,
+            then helps you return with more room.
           </p>
-          <fieldset className="entry-options" disabled={mode === 'starting'}>
-            <legend>Begin with</legend>
-            <label className="mode-choice">
-              <input
-                type="radio"
-                name="session-mode"
-                checked={preferences.mode === 'mirror'}
-                onChange={() => setPreferences((current) => ({
-                  ...current,
-                  mode: 'mirror',
-                  camera: true,
-                }))}
-              />
-              <span>Mirror</span>
-            </label>
-            <label className="mode-choice">
-              <input
-                type="radio"
-                name="session-mode"
-                checked={preferences.mode === 'pure'}
-                onChange={() => setPreferences((current) => ({
-                  ...current,
-                  mode: 'pure',
-                  camera: false,
-                }))}
-              />
-              <span>Pure</span>
-            </label>
-          </fieldset>
-          <label className="mode-choice">
-            <input
-              type="checkbox"
-              checked={preferences.guidance}
-              disabled={mode === 'starting'}
-              onChange={(event) => setPreferences((current) => ({
-                ...current,
-                guidance: event.currentTarget.checked,
-              }))}
-            />
-            <span>Guide me</span>
-          </label>
-          <label className="mode-choice">
-            <input
-              type="checkbox"
-              checked={preferences.sound}
-              disabled={mode === 'starting'}
-              onChange={(event) => setPreferences((current) => ({
-                ...current,
-                sound: event.currentTarget.checked,
-              }))}
-            />
-            <span>Soothing sound</span>
-          </label>
-          <p className="mode-note">
-            Mirror uses local camera analysis. Pure keeps the same reset without camera.
-          </p>
-          <button
-            className="primary"
-            type="button"
-            onClick={() => void begin()}
-            disabled={mode === 'starting'}
-          >
-            {mode === 'starting' ? 'Opening' : 'Begin'}
-          </button>
-          <p className="session-note">
-            Soothing sound begins with the experience. Press <kbd>?</kbd> anytime to adjust
-            guidance, sound, live signals, or camera sensing.
-          </p>
-          <details>
-            <summary>Privacy</summary>
-            <p>
-              Camera, audio, and motion signals are processed only in memory on this device,
-              then discarded. Nothing is saved or sent.
-            </p>
-            <p>
-              A bounded aggregate calibration can remain on this device to help future
-              sessions adapt.
-            </p>
-            <button className="quiet" type="button" onClick={() => void clearCalibration()}>
-              Clear local calibration
+          <div className="entry-actions">
+            <button
+              className="primary"
+              type="button"
+              onClick={() => void begin()}
+              disabled={mode !== 'ready'}
+            >
+              {mode === 'starting'
+                ? 'Allow camera'
+                : mode === 'calibrating'
+                  ? 'Calibrating'
+                  : 'Start reset'}
             </button>
-          </details>
+            <label className="guided-toggle">
+              <input
+                type="checkbox"
+                checked={preferences.guidance}
+                disabled={mode !== 'ready'}
+                onChange={(event) => setPreferences((current) => ({
+                  ...current,
+                  guidance: event.currentTarget.checked,
+                }))}
+              />
+              <span>Guided mode</span>
+            </label>
+          </div>
+          <p className="mode-note">Camera stays on this device. Guided starts off. Press <kbd>?</kbd> inside to adjust.</p>
           {message ? <p className="system-message" role="status">{message}</p> : null}
         </div>
       </section>
 
       {mode === 'active' ? (
         <>
+          {preferences.mode === 'mirror' ? (
+            <p className="mirror-progress" aria-live="polite">
+              {mirrorProgressLabel(telemetry)}
+            </p>
+          ) : null}
           <SessionGuidance cue={cue} visible={preferences.guidance} />
           <button
             ref={menuTriggerRef}

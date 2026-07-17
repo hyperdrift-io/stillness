@@ -156,6 +156,7 @@ export class MirrorSignalAdapter {
     if (!result || result.faceLandmarks.length === 0) {
       return {
         mode: 'mirror',
+        sourceVideo: video,
         motion: frameFeatures.motion,
         presence: frameFeatures.presence,
         confidence: frameFeatures.confidence,
@@ -174,6 +175,7 @@ export class MirrorSignalAdapter {
 
     return {
       mode: 'mirror',
+      sourceVideo: video,
       motion,
       presence: 1,
       confidence,

@@ -117,6 +117,7 @@ export class CameraSensor {
 
     return {
       mode: 'pure',
+      sourceVideo: null,
       motion,
       presence: clamp01(exposureConfidence * 0.45 + detailConfidence * 0.55),
       confidence,
