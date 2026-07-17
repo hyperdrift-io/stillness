@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { trackEvent } from '../analytics/events.ts';
 import { StillnessAudio } from '../audio/stillness-audio.ts';
-import { CameraSensor } from '../sensing/camera-sensor.ts';
 import { MirrorSignalAdapter } from '../sensing/mirror-signal-adapter.ts';
 import { MotionSensor } from '../sensing/motion-sensor.ts';
 import { BaselineStore } from '../state/baseline-store.ts';
@@ -21,6 +20,8 @@ import {
 } from './session-preferences.ts';
 
 type ExperienceMode = 'ready' | 'starting' | 'active' | 'error';
+
+const cameraUnavailableMessage = 'Pure is open. Mirror needs camera permission and can be enabled from ?.';
 
 const initialTelemetry: SessionTelemetry = {
   movement: 0,
@@ -61,6 +62,16 @@ export function StillnessExperience() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [audioAvailable, setAudioAvailable] = useState(true);
 
+  const fallBackToPure = useCallback((token: SessionToken | null = controllerTokenRef.current) => {
+    if (token !== null && !transitionsRef.current.owns(token)) return;
+    setPreferences((current) => ({
+      ...current,
+      mode: 'pure',
+      camera: false,
+    }));
+    setMessage(cameraUnavailableMessage);
+  }, []);
+
   const leave = useCallback((): Promise<void> => {
     const controller = controllerRef.current;
     const token = controllerTokenRef.current;
@@ -96,7 +107,12 @@ export function StillnessExperience() {
       }));
       trackEvent('session_preference_changed', { preference, enabled: nextMode });
       if (nextMode === 'pure') void controllerRef.current?.setCameraEnabled(false);
-      if (nextMode === 'mirror') void controllerRef.current?.setCameraEnabled(true);
+      if (nextMode === 'mirror') {
+        const token = controllerTokenRef.current;
+        void controllerRef.current?.setCameraEnabled(true).then((available) => {
+          if (!available) fallBackToPure(token);
+        });
+      }
       return;
     }
 
@@ -117,7 +133,10 @@ export function StillnessExperience() {
         }
       });
     } else if (preference === 'camera') {
-      void controllerRef.current?.setCameraEnabled(nextEnabled);
+      const token = controllerTokenRef.current;
+      void controllerRef.current?.setCameraEnabled(nextEnabled).then((available) => {
+        if (nextEnabled && !available) fallBackToPure(token);
+      });
     } else if (preference === 'guidance') {
       if (nextEnabled) {
         guidancePolicyRef.current.reset();
@@ -127,7 +146,7 @@ export function StillnessExperience() {
         setCue(null);
       }
     }
-  }, [telemetry]);
+  }, [fallBackToPure, telemetry]);
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -222,10 +241,7 @@ export function StillnessExperience() {
 
     let controller: SessionController | null = null;
     try {
-      const mirrorMode = preferences.mode === 'mirror';
-      const camera = mirrorMode
-        ? new MirrorSignalAdapter()
-        : new CameraSensor();
+      const camera = new MirrorSignalAdapter();
       controller = new SessionController({
         renderer: new SoulMirrorRenderer(canvas),
         audio: new StillnessAudio(),
@@ -248,20 +264,25 @@ export function StillnessExperience() {
       controllerTokenRef.current = token;
 
       if (!preferences.camera || preferences.mode === 'pure') void controller.setCameraEnabled(false);
-      await controller.start();
+      const startResult = await controller.start();
       if (!transitionsRef.current.owns(token)) {
         await controller.stop();
         return;
       }
+      const requestedCamera = preferences.camera && preferences.mode === 'mirror';
+      const startedPreferences = requestedCamera && !startResult.cameraStarted
+        ? { ...preferences, mode: 'pure' as const, camera: false }
+        : preferences;
+      if (requestedCamera && !startResult.cameraStarted) fallBackToPure(token);
       const available = await controller.setSoundEnabled(preferences.sound);
       transitionsRef.current.activate(token, () => {
         setAudioAvailable(available);
         setMode('active');
         trackEvent('session_started', {
-          mode: preferences.mode,
+          mode: startedPreferences.mode,
           guidance: preferences.guidance,
           sound: preferences.sound,
-          camera: preferences.camera,
+          camera: startedPreferences.camera,
         });
       });
     } catch {
@@ -271,7 +292,7 @@ export function StillnessExperience() {
           controllerRef.current = null;
           controllerTokenRef.current = null;
         }
-        setMessage('This browser could not create the light field. A current browser with WebGL2 can open it.');
+        setMessage('This browser could not open the soul mirror. A current browser can open it.');
         setMode('error');
       });
     }

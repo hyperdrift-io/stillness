@@ -198,7 +198,7 @@ export function SessionMenu({
           <h3 id="live-signals-title">Live signals</h3>
           {[
             ['movement', 'Movement', telemetry.movement, movementLabel(telemetry.movement, telemetry.direction)],
-            ['expression', 'Expression', telemetry.expressionActivity, expressionLabel(telemetry.expressionActivity)],
+            ['expression', 'Expression signals', telemetry.expressionActivity, expressionLabel(telemetry.expressionActivity)],
             ['turbulence', 'Turbulence', telemetry.turbulence, telemetry.direction === 'rising' ? 'rising' : 'settling'],
             ['settling', 'Settling', telemetry.settling, steadinessLabel(telemetry.settling)],
             ['relief', 'Relief', telemetry.relief, reliefLabel(telemetry.relief)],

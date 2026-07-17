@@ -84,6 +84,10 @@ export type SessionSnapshot = {
   sensorConfidence: number;
 };
 
+export type SessionStartResult = {
+  cameraStarted: boolean;
+};
+
 function interpolate(from: number, to: number, progress: number): number {
   return from + (to - from) * progress;
 }
@@ -141,8 +145,8 @@ export class SessionController {
     this.dependencies = dependencies;
   }
 
-  async start(): Promise<void> {
-    if (this.running) return;
+  async start(): Promise<SessionStartResult> {
+    if (this.running) return { cameraStarted: this.cameraEnabled };
     this.running = true;
     this.startTime = this.dependencies.now();
     this.elapsedMs = 0;
@@ -163,7 +167,6 @@ export class SessionController {
     this.dependencies.renderer.start();
     this.frame = this.dependencies.requestFrame(this.onFrame);
 
-    void cameraPromise.catch(() => {});
     void motionPromise.then(() => {
       if (!this.running) this.dependencies.motion.stop();
     }).catch(() => {});
@@ -178,6 +181,9 @@ export class SessionController {
     } catch {
       this.audioAvailable = false;
     }
+
+    const cameraStarted = await cameraPromise.catch(() => false);
+    return { cameraStarted };
   }
 
   step(now: number): ResonanceState {
