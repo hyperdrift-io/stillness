@@ -8,6 +8,7 @@ import {
   type SessionTelemetry,
 } from '../src/experience/session-controller.ts';
 import type { ResonanceState } from '../src/resonance/resonance.ts';
+import { initialMirrorSignal, type MirrorSignal } from '../src/sensing/mirror-signal.ts';
 import type { PersonalBaseline } from '../src/state/baseline-store.ts';
 
 type HarnessOptions = {
@@ -23,6 +24,19 @@ type HarnessOptions = {
   };
 };
 
+function mirrorObservation(overrides: Partial<MirrorSignal> = {}): MirrorSignal {
+  return {
+    ...initialMirrorSignal,
+    mode: 'mirror',
+    motion: 0.95,
+    presence: 0.9,
+    confidence: 0,
+    luminance: 0.5,
+    softness: 0.5,
+    ...overrides,
+  };
+}
+
 function createHarness(observationConfidence = 0, options: HarnessOptions = {}): {
   controller: SessionController;
   updates: ResonanceState[];
@@ -35,7 +49,7 @@ function createHarness(observationConfidence = 0, options: HarnessOptions = {}):
   const dependencies: SessionDependencies = {
     renderer: {
       start: () => calls.push('renderer:start'),
-      update: (state) => updates.push(state),
+      update: (frame) => updates.push(frame.resonance),
       dispose: () => calls.push('renderer:dispose'),
     },
     audio: {
@@ -55,12 +69,7 @@ function createHarness(observationConfidence = 0, options: HarnessOptions = {}):
         if (options.cameraStart) return options.cameraStart();
         return options.cameraStartResult ?? true;
       },
-      read: options.cameraRead ?? (() => ({
-        motion: 0.95,
-        presence: 0.9,
-        confidence: observationConfidence,
-        luminance: 0.5,
-      })),
+      read: options.cameraRead ?? (() => mirrorObservation({ confidence: observationConfidence })),
       stop: () => calls.push('camera:stop'),
     },
     motion: {
@@ -214,7 +223,7 @@ test('SessionController emits bounded telemetry at a readable cadence', async ()
 test('SessionController labels decreasing movement as settling', async () => {
   let movement = 1;
   const { controller, telemetry } = createHarness(1, {
-    cameraRead: () => ({ motion: movement, presence: 0.9, confidence: 1, luminance: 0.5 }),
+    cameraRead: () => mirrorObservation({ motion: movement, confidence: 1 }),
     motionRead: () => ({ motion: movement, confidence: 1 }),
   });
   await controller.start();
@@ -228,7 +237,7 @@ test('SessionController labels decreasing movement as settling', async () => {
 test('SessionController labels increasing movement as rising', async () => {
   let movement = 0;
   const { controller, telemetry } = createHarness(1, {
-    cameraRead: () => ({ motion: movement, presence: 0.9, confidence: 1, luminance: 0.5 }),
+    cameraRead: () => mirrorObservation({ motion: movement, confidence: 1 }),
     motionRead: () => ({ motion: movement, confidence: 1 }),
   });
   await controller.start();
@@ -241,7 +250,7 @@ test('SessionController labels increasing movement as rising', async () => {
 
 test('SessionController publishes safe scripted telemetry when sensing confidence is zero', async () => {
   const { controller, telemetry } = createHarness(0, {
-    cameraRead: () => ({ motion: 0.95, presence: 0.9, confidence: 0, luminance: 0.5 }),
+    cameraRead: () => mirrorObservation({ confidence: 0 }),
     motionRead: () => ({ motion: 0.8, confidence: 0 }),
   });
   await controller.start();
@@ -253,6 +262,13 @@ test('SessionController publishes safe scripted telemetry when sensing confidenc
     steadiness: scripted.stability,
     presence: scripted.presence,
     sensingQuality: 0,
+    expressionActivity: 0,
+    softness: 0.5,
+    turbulence: 1 - scripted.stability,
+    settling: scripted.stability,
+    relief: 0,
+    readiness: 0,
+    confidence: 0,
     direction: 'holding',
     source: 'scripted',
   });
@@ -272,7 +288,7 @@ test('SessionController resets telemetry cadence for a restarted session', async
 test('SessionController clears camera and device feature history when a session restarts', async () => {
   let movement = 1;
   const { controller, telemetry } = createHarness(1, {
-    cameraRead: () => ({ motion: movement, presence: 0.9, confidence: 1, luminance: 0.5 }),
+    cameraRead: () => mirrorObservation({ motion: movement, confidence: 1 }),
     motionRead: () => ({ motion: movement, confidence: 1 }),
   });
   await controller.start();
@@ -291,11 +307,9 @@ test('camera preference clears camera feature history when sensing is disabled',
   let cameraMotion = 1;
   let cameraConfidence = 1;
   const { controller, telemetry } = createHarness(1, {
-    cameraRead: () => ({
+    cameraRead: () => mirrorObservation({
       motion: cameraMotion,
-      presence: 0.9,
       confidence: cameraConfidence,
-      luminance: 0.5,
     }),
     motionRead: () => ({ motion: 0, confidence: 1 }),
   });

@@ -176,12 +176,12 @@ test('metric helpers describe values without exposing numbers', async () => {
   assert.equal(steadinessLabel(0.8), 'steady');
 
   assert.equal(presenceLabel(0.8, 'scripted'), 'unavailable');
-  assert.equal(presenceLabel(0.2, 'sensed'), 'limited');
-  assert.equal(presenceLabel(0.8, 'sensed'), 'present');
+  assert.equal(presenceLabel(0.2, 'mirror'), 'limited');
+  assert.equal(presenceLabel(0.8, 'mirror'), 'present');
 
   assert.equal(sensingLabel(0.8, 'scripted'), 'unavailable');
-  assert.equal(sensingLabel(0.2, 'sensed'), 'limited');
-  assert.equal(sensingLabel(0.8, 'sensed'), 'clear');
+  assert.equal(sensingLabel(0.2, 'mirror'), 'limited');
+  assert.equal(sensingLabel(0.8, 'mirror'), 'clear');
 });
 
 test('metric helpers preserve every exact qualitative threshold boundary', async () => {
@@ -200,9 +200,9 @@ test('metric helpers preserve every exact qualitative threshold boundary', async
   assert.equal(steadinessLabel(0.699_999), 'forming');
   assert.equal(steadinessLabel(0.7), 'steady');
 
-  assert.equal(presenceLabel(0.399_999, 'sensed'), 'limited');
-  assert.equal(presenceLabel(0.4, 'sensed'), 'present');
+  assert.equal(presenceLabel(0.399_999, 'mirror'), 'limited');
+  assert.equal(presenceLabel(0.4, 'mirror'), 'present');
 
-  assert.equal(sensingLabel(0.499_999, 'sensed'), 'limited');
-  assert.equal(sensingLabel(0.5, 'sensed'), 'clear');
+  assert.equal(sensingLabel(0.499_999, 'mirror'), 'limited');
+  assert.equal(sensingLabel(0.5, 'mirror'), 'clear');
 });
