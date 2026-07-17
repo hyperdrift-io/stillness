@@ -1,5 +1,6 @@
 import type { SessionRenderFrame } from '../experience/model.ts';
 import { smoothValue } from '../resonance/smoothing.ts';
+import type { MirrorPoint, MirrorTopology } from '../sensing/mirror-signal.ts';
 
 const VERTEX_SHADER = `#version 300 es
 precision highp float;
@@ -103,11 +104,76 @@ void main() {
 }
 `;
 
+const MESH_VERTEX_SHADER = `#version 300 es
+precision highp float;
+
+in vec3 aPoint;
+
+uniform float uTime;
+uniform float uTurbulence;
+uniform float uSettling;
+uniform float uExpression;
+uniform float uRelief;
+uniform float uReadiness;
+
+out float vDepth;
+out float vSpark;
+
+float hash(float value) {
+  return fract(sin(value * 91.3458) * 47453.5453);
+}
+
+void main() {
+  float seed = hash(float(gl_VertexID) + aPoint.z * 137.0);
+  float stillness = clamp(uRelief * 0.62 + uReadiness * 0.38, 0.0, 1.0);
+  float scatter = (uTurbulence * 0.22 + uExpression * 0.18) * (1.0 - stillness * 0.62);
+  float breath = sin(uTime * 0.52 + seed * 6.2831) * (0.012 + uSettling * 0.012);
+  vec2 source = aPoint.xy;
+  vec2 astral = source * (0.72 + stillness * 0.18);
+  vec2 galaxy = vec2(
+    cos(seed * 6.2831 + uTime * 0.04),
+    sin(seed * 6.2831 + uTime * 0.04)
+  ) * scatter * (0.35 + seed * 0.65);
+  vec2 position = astral + galaxy + normalize(source + vec2(0.001)) * breath;
+  position.y *= -1.0;
+  gl_Position = vec4(position, 0.0, 1.0);
+  gl_PointSize = mix(1.1, 4.8, seed) * (1.0 + uReadiness * 0.65 + uExpression * 0.45);
+  vDepth = clamp(0.5 + aPoint.z * 2.8, 0.0, 1.0);
+  vSpark = seed;
+}
+`;
+
+const MESH_FRAGMENT_SHADER = `#version 300 es
+precision highp float;
+
+uniform float uExpression;
+uniform float uRelief;
+uniform float uReadiness;
+
+in float vDepth;
+in float vSpark;
+out vec4 outColor;
+
+void main() {
+  vec2 local = gl_PointCoord - 0.5;
+  float core = smoothstep(0.5, 0.0, length(local));
+  vec3 ember = vec3(1.0, 0.62, 0.28);
+  vec3 blue = vec3(0.54, 0.68, 1.0);
+  vec3 white = vec3(1.0, 0.92, 0.78);
+  float progress = clamp(uRelief * 0.62 + uReadiness * 0.38, 0.0, 1.0);
+  vec3 color = mix(ember, blue, progress * 0.72 + vDepth * 0.18);
+  color = mix(color, white, uReadiness * 0.34 + vSpark * 0.08);
+  float alpha = core * (0.18 + uExpression * 0.22 + progress * 0.38);
+  outColor = vec4(color, alpha);
+}
+`;
+
 type RenderValues = {
   turbulence: number;
   coherence: number;
   settling: number;
   softness: number;
+  expression: number;
   relief: number;
   readiness: number;
 };
@@ -124,11 +190,24 @@ type Uniforms = {
   readiness: WebGLUniformLocation;
 };
 
+type MeshUniforms = {
+  time: WebGLUniformLocation;
+  turbulence: WebGLUniformLocation;
+  settling: WebGLUniformLocation;
+  expression: WebGLUniformLocation;
+  relief: WebGLUniformLocation;
+  readiness: WebGLUniformLocation;
+};
+
 export class SoulMirrorRenderer {
   private context: WebGL2RenderingContext | null = null;
   private program: WebGLProgram | null = null;
+  private meshProgram: WebGLProgram | null = null;
   private texture: WebGLTexture | null = null;
+  private meshBuffer: WebGLBuffer | null = null;
   private uniforms: Uniforms | null = null;
+  private meshUniforms: MeshUniforms | null = null;
+  private meshPointCount = 0;
   private frameHandle = 0;
   private running = false;
   private lastFrame = 0;
@@ -138,6 +217,7 @@ export class SoulMirrorRenderer {
     coherence: 0.3,
     settling: 0.25,
     softness: 0.5,
+    expression: 0,
     relief: 0,
     readiness: 0,
   };
@@ -158,8 +238,11 @@ export class SoulMirrorRenderer {
     if (!context) throw new Error('This device cannot create the soul mirror.');
 
     const program = this.createProgram(context);
+    const meshProgram = this.createMeshProgram(context);
     const texture = context.createTexture();
+    const meshBuffer = context.createBuffer();
     if (!texture) throw new Error('This device cannot create the mirror texture.');
+    if (!meshBuffer) throw new Error('This device cannot create the mirror mesh.');
     context.useProgram(program);
     context.activeTexture(context.TEXTURE0);
     context.bindTexture(context.TEXTURE_2D, texture);
@@ -171,8 +254,11 @@ export class SoulMirrorRenderer {
 
     this.context = context;
     this.program = program;
+    this.meshProgram = meshProgram;
     this.texture = texture;
+    this.meshBuffer = meshBuffer;
     this.uniforms = this.readUniforms(context, program);
+    this.meshUniforms = this.readMeshUniforms(context, meshProgram);
     this.running = true;
     this.lastFrame = performance.now();
     window.addEventListener('resize', this.resize);
@@ -193,10 +279,16 @@ export class SoulMirrorRenderer {
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     if (this.context && this.texture) this.context.deleteTexture(this.texture);
     if (this.context && this.program) this.context.deleteProgram(this.program);
+    if (this.context && this.meshProgram) this.context.deleteProgram(this.meshProgram);
+    if (this.context && this.meshBuffer) this.context.deleteBuffer(this.meshBuffer);
     this.context = null;
     this.program = null;
+    this.meshProgram = null;
     this.texture = null;
+    this.meshBuffer = null;
     this.uniforms = null;
+    this.meshUniforms = null;
+    this.meshPointCount = 0;
     this.target = null;
   }
 
@@ -228,6 +320,7 @@ export class SoulMirrorRenderer {
       this.values.coherence = smoothValue(this.values.coherence, frame.resonance.coherence, deltaSeconds, 1.4);
       this.values.settling = smoothValue(this.values.settling, frame.relief.settling, deltaSeconds, 1.3);
       this.values.softness = smoothValue(this.values.softness, frame.relief.softness, deltaSeconds, 1.5);
+      this.values.expression = smoothValue(this.values.expression, frame.relief.expressionActivity, deltaSeconds, 2.8);
       this.values.relief = smoothValue(this.values.relief, frame.relief.relief, deltaSeconds, 1.6);
       this.values.readiness = smoothValue(this.values.readiness, frame.relief.readiness, deltaSeconds, 2);
     }
@@ -255,6 +348,7 @@ export class SoulMirrorRenderer {
     context.uniform1f(uniforms.relief, this.values.relief);
     context.uniform1f(uniforms.readiness, this.values.readiness);
     context.drawArrays(context.TRIANGLES, 0, 3);
+    if (frame?.mirror.topology) this.drawFaceConstellation(context, frame.mirror.topology, now);
 
     this.requestNextFrame();
   };
@@ -271,6 +365,24 @@ export class SoulMirrorRenderer {
     context.deleteShader(fragment);
     if (!context.getProgramParameter(program, context.LINK_STATUS)) {
       const detail = context.getProgramInfoLog(program) ?? 'Unknown mirror program error';
+      context.deleteProgram(program);
+      throw new Error(detail);
+    }
+    return program;
+  }
+
+  private createMeshProgram(context: WebGL2RenderingContext): WebGLProgram {
+    const vertex = this.createShader(context, context.VERTEX_SHADER, MESH_VERTEX_SHADER);
+    const fragment = this.createShader(context, context.FRAGMENT_SHADER, MESH_FRAGMENT_SHADER);
+    const program = context.createProgram();
+    if (!program) throw new Error('This device cannot create the mesh program.');
+    context.attachShader(program, vertex);
+    context.attachShader(program, fragment);
+    context.linkProgram(program);
+    context.deleteShader(vertex);
+    context.deleteShader(fragment);
+    if (!context.getProgramParameter(program, context.LINK_STATUS)) {
+      const detail = context.getProgramInfoLog(program) ?? 'Unknown mesh program error';
       context.deleteProgram(program);
       throw new Error(detail);
     }
@@ -306,6 +418,70 @@ export class SoulMirrorRenderer {
       softness: required('uSoftness'),
       relief: required('uRelief'),
       readiness: required('uReadiness'),
+    };
+  }
+
+  private readMeshUniforms(context: WebGL2RenderingContext, program: WebGLProgram): MeshUniforms {
+    const required = (name: string): WebGLUniformLocation => {
+      const location = context.getUniformLocation(program, name);
+      if (!location) throw new Error(`Mirror mesh shader missing ${name}.`);
+      return location;
+    };
+    return {
+      time: required('uTime'),
+      turbulence: required('uTurbulence'),
+      settling: required('uSettling'),
+      expression: required('uExpression'),
+      relief: required('uRelief'),
+      readiness: required('uReadiness'),
+    };
+  }
+
+  private drawFaceConstellation(context: WebGL2RenderingContext, topology: MirrorTopology, now: number): void {
+    const program = this.meshProgram;
+    const buffer = this.meshBuffer;
+    const uniforms = this.meshUniforms;
+    if (!program || !buffer || !uniforms || topology.points.length === 0) return;
+
+    const points = this.packFacePoints(topology);
+    this.meshPointCount = points.length / 3;
+    context.useProgram(program);
+    context.bindBuffer(context.ARRAY_BUFFER, buffer);
+    context.bufferData(context.ARRAY_BUFFER, points, context.DYNAMIC_DRAW);
+    const attribute = context.getAttribLocation(program, 'aPoint');
+    context.enableVertexAttribArray(attribute);
+    context.vertexAttribPointer(attribute, 3, context.FLOAT, false, 0, 0);
+    context.uniform1f(uniforms.time, this.reducedMotionQuery.matches ? 0 : now / 1_000);
+    context.uniform1f(uniforms.turbulence, this.values.turbulence);
+    context.uniform1f(uniforms.settling, this.values.settling);
+    context.uniform1f(uniforms.expression, this.values.expression);
+    context.uniform1f(uniforms.relief, this.values.relief);
+    context.uniform1f(uniforms.readiness, this.values.readiness);
+    context.enable(context.BLEND);
+    context.blendFunc(context.SRC_ALPHA, context.ONE);
+    context.drawArrays(context.POINTS, 0, this.meshPointCount);
+    context.disable(context.BLEND);
+  }
+
+  private packFacePoints(topology: MirrorTopology): Float32Array {
+    const packed = new Float32Array(topology.points.length * 3);
+    const scale = Math.max(0.01, topology.scale);
+    let offset = 0;
+    for (const point of topology.points) {
+      const normalized = this.normalizeFacePoint(point, topology, scale);
+      packed[offset] = normalized.x;
+      packed[offset + 1] = normalized.y;
+      packed[offset + 2] = normalized.z;
+      offset += 3;
+    }
+    return packed;
+  }
+
+  private normalizeFacePoint(point: MirrorPoint, topology: MirrorTopology, scale: number): MirrorPoint {
+    return {
+      x: ((point.x - topology.centerX) / scale) * 1.35,
+      y: ((point.y - topology.centerY) / scale) * 1.35,
+      z: point.z,
     };
   }
 

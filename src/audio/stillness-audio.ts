@@ -11,7 +11,7 @@ export type AudioParameters = {
 };
 
 const SILENT_GAIN = 0.0001;
-const INITIAL_ADAPTIVE_MASTER_GAIN = 0.08;
+const INITIAL_ADAPTIVE_MASTER_GAIN = 0.16;
 
 export function audibleGainTarget(audible: boolean, adaptiveGain: number): number {
   return audible && Number.isFinite(adaptiveGain) ? adaptiveGain : SILENT_GAIN;
@@ -24,10 +24,10 @@ export function mapAudioParameters(state: ResonanceState): AudioParameters {
   const space = clamp01(state.space);
 
   return {
-    masterGain: 0.018 + energy * 0.118 + space * 0.025,
-    droneGain: 0.024 + energy * 0.09 + space * 0.035,
-    textureGain: turbulence * energy * 0.044,
-    filterHz: 160 + energy * 1_150 + turbulence * 520,
+    masterGain: 0.055 + energy * 0.16 + space * 0.04,
+    droneGain: 0.07 + energy * 0.13 + space * 0.05,
+    textureGain: 0.006 + turbulence * energy * 0.06,
+    filterHz: 220 + energy * 1_450 + turbulence * 620,
     pulseHz: 0.035 + pulse * 0.28,
     delayMix: 0.08 + space * 0.36,
   };
@@ -66,13 +66,13 @@ export class StillnessAudio {
     const pulseGain = context.createGain();
 
     master.gain.value = SILENT_GAIN;
-    droneGain.gain.value = 0.06;
-    textureGain.gain.value = 0.025;
+    droneGain.gain.value = 0.12;
+    textureGain.gain.value = 0.03;
     filter.type = 'lowpass';
     filter.frequency.value = 1_200;
     filter.Q.value = 0.55;
     delay.delayTime.value = 0.72;
-    delayGain.gain.value = 0.12;
+    delayGain.gain.value = 0.16;
     delayFeedback.gain.value = 0.22;
     pulseGain.gain.value = 0.008;
 
@@ -86,14 +86,14 @@ export class StillnessAudio {
     delayFeedback.connect(delay);
     master.connect(context.destination);
 
-    const frequencies = [55, 82.5, 110];
+    const frequencies = [55, 82.5, 110, 165, 220];
     const oscillators = frequencies.map((frequency, index) => {
       const oscillator = context.createOscillator();
       const voice = context.createGain();
       oscillator.type = index === 1 ? 'triangle' : 'sine';
       oscillator.frequency.value = frequency;
       oscillator.detune.value = index === 0 ? -4 : index === 2 ? 3 : 0;
-      voice.gain.value = [0.5, 0.2, 0.08][index] ?? 0.1;
+      voice.gain.value = [0.5, 0.22, 0.12, 0.055, 0.035][index] ?? 0.04;
       oscillator.connect(voice);
       voice.connect(droneGain);
       oscillator.start();

@@ -16,8 +16,9 @@ Relief is a short interactive reset for moments when the user needs to recover, 
 - User-facing copy follows `meta/PHILOSOPHY.md` section 8, Speak to Enable.
 - Mirror mode is the default experience. It uses local MediaPipe face landmarks and blendshapes to drive an abstract soul mirror.
 - Pure mode remains the no-camera fallback and should share the same session engine.
-- The mirror preserves facial structure as topology and motion; it must not render a normal camera feed, realistic avatar, identity cues, skin tone reconstruction, age/gender/beauty cues, or emotion labels.
-- User-facing language may say expression signals or facial movement signals. It must not say emotion recognition or claim to detect stress, anxiety, mood, health, or biological battery level.
+- The mirror uses the user's face mesh and expression signals as the live driver. It should feel like an astral projection of the user, not a normal camera feed and not a detached pure abstraction.
+- The visual may preserve facial structure as constellation, mesh, light, topology, and motion. It must not render a realistic avatar, skin tone reconstruction, age/gender/beauty cues, or emotion labels.
+- User-facing language may say expression signals, facial movement signals, softening, relief, stillness, and readiness. It must not claim to diagnose stress, anxiety, mood, health, or biological battery level.
 
 ## Architecture
 
