@@ -197,20 +197,27 @@ export function SessionMenu({
         <section aria-labelledby="live-signals-title">
           <h3 id="live-signals-title">Live signals</h3>
           {[
-            ['Movement', telemetry.movement, movementLabel(telemetry.movement, telemetry.direction)],
-            ['Expression', telemetry.expressionActivity, expressionLabel(telemetry.expressionActivity)],
-            ['Turbulence', telemetry.turbulence, telemetry.direction === 'rising' ? 'rising' : 'settling'],
-            ['Settling', telemetry.settling, steadinessLabel(telemetry.settling)],
-            ['Relief', telemetry.relief, reliefLabel(telemetry.relief)],
-            ['Readiness', telemetry.readiness, readinessLabel(telemetry.readiness)],
-            ['Signal', telemetry.confidence, sensingLabel(telemetry.confidence, telemetry.source)],
-          ].map(([name, value, state]) => (
-            <p key={name}>
-              <span>{name}</span>
-              <meter className="signal-meter" min="0" max="1" value={Number(value)}>
+            ['movement', 'Movement', telemetry.movement, movementLabel(telemetry.movement, telemetry.direction)],
+            ['expression', 'Expression', telemetry.expressionActivity, expressionLabel(telemetry.expressionActivity)],
+            ['turbulence', 'Turbulence', telemetry.turbulence, telemetry.direction === 'rising' ? 'rising' : 'settling'],
+            ['settling', 'Settling', telemetry.settling, steadinessLabel(telemetry.settling)],
+            ['relief', 'Relief', telemetry.relief, reliefLabel(telemetry.relief)],
+            ['readiness', 'Readiness', telemetry.readiness, readinessLabel(telemetry.readiness)],
+            ['signal', 'Signal', telemetry.confidence, sensingLabel(telemetry.confidence, telemetry.source)],
+          ].map(([id, name, value, state]) => (
+            <p key={id}>
+              <span id={`live-signal-${id}-name`}>{name}</span>
+              <meter
+                className="signal-meter"
+                min="0"
+                max="1"
+                value={Number(value)}
+                aria-labelledby={`live-signal-${id}-name`}
+                aria-describedby={`live-signal-${id}-state`}
+              >
                 {name}
               </meter>
-              <span>{state}</span>
+              <span id={`live-signal-${id}-state`}>{state}</span>
             </p>
           ))}
         </section>
