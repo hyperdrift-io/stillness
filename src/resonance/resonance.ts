@@ -51,6 +51,7 @@ export function targetResonance(
   const presence = mix(safePrior.presence, estimate.presence, confidence);
   const trend = estimate.trend * confidence;
   const progress = phaseProgress[phase];
+  const progressInfluence = progress * 0.42;
 
   // Meet the observed velocity, then guide it by a small confidence-scaled amount.
   const guidedActivation = clamp01(activation * (1 - 0.1 * confidence));
@@ -58,14 +59,14 @@ export function targetResonance(
   const settling = clamp01(guidedStability + Math.max(0, trend) * 0.15);
 
   return {
-    complexity: clamp01(0.04 + guidedActivation * 0.7 + (1 - progress) * 0.24),
-    turbulence: clamp01(0.02 + guidedActivation * 0.72 + (1 - settling) * 0.16 - progress * 0.08),
-    coherence: clamp01(0.22 + settling * 0.52 + progress * 0.25),
-    focus: clamp01(0.42 + presence * 0.38 + (1 - progress) * 0.16),
-    depth: clamp01(0.32 + guidedActivation * 0.2 + presence * 0.18 + (1 - progress) * 0.22),
-    pulse: clamp01(0.12 + guidedActivation * 0.62 + (1 - progress) * 0.16),
-    audioEnergy: clamp01(0.035 + guidedActivation * 0.62 + (1 - progress) * 0.18),
+    complexity: clamp01(0.04 + guidedActivation * 0.7 + (1 - progressInfluence) * 0.24),
+    turbulence: clamp01(0.02 + guidedActivation * 0.72 + (1 - settling) * 0.16 - progressInfluence * 0.08),
+    coherence: clamp01(0.22 + settling * 0.52 + progressInfluence * 0.25),
+    focus: clamp01(0.42 + presence * 0.38 + (1 - progressInfluence) * 0.16),
+    depth: clamp01(0.32 + guidedActivation * 0.2 + presence * 0.18 + (1 - progressInfluence) * 0.22),
+    pulse: clamp01(0.12 + guidedActivation * 0.62 + (1 - progressInfluence) * 0.16),
+    audioEnergy: clamp01(0.035 + guidedActivation * 0.62 + (1 - progressInfluence) * 0.18),
     warmth: clamp01(0.28 + (1 - progress) * 0.46 + guidedActivation * 0.18),
-    space: clamp01(0.18 + settling * 0.34 + progress * 0.48),
+    space: clamp01(0.18 + settling * 0.34 + progressInfluence * 0.48),
   };
 }

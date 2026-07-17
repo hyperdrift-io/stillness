@@ -24,12 +24,12 @@ export function mapAudioParameters(state: ResonanceState): AudioParameters {
   const space = clamp01(state.space);
 
   return {
-    masterGain: 0.012 + energy * 0.148,
-    droneGain: 0.018 + energy * 0.125,
-    textureGain: turbulence * energy * 0.072,
-    filterHz: 180 + energy * 1_550 + turbulence * 870,
-    pulseHz: 0.04 + pulse * 0.36,
-    delayMix: 0.04 + space * 0.3,
+    masterGain: 0.018 + energy * 0.118 + space * 0.025,
+    droneGain: 0.024 + energy * 0.09 + space * 0.035,
+    textureGain: turbulence * energy * 0.044,
+    filterHz: 160 + energy * 1_150 + turbulence * 520,
+    pulseHz: 0.035 + pulse * 0.28,
+    delayMix: 0.08 + space * 0.36,
   };
 }
 
