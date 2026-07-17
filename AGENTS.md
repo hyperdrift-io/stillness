@@ -2,7 +2,7 @@
 
 ## Mission
 
-Create an adaptive audiovisual presence that meets the user at their current velocity and progressively removes stimulus until only stillness remains.
+Relief is a short interactive reset for moments when the user needs to recover, reload their batteries, and return stronger. The first outcome is immediate relief. The second outcome is renewed readiness.
 
 ## Product rules
 
@@ -14,6 +14,10 @@ Create an adaptive audiovisual presence that meets the user at their current vel
 - Persist only bounded aggregate session summaries for local calibration.
 - The first session must remain complete with camera or motion access denied.
 - User-facing copy follows `meta/PHILOSOPHY.md` section 8, Speak to Enable.
+- Mirror mode is the default experience. It uses local MediaPipe face landmarks and blendshapes to drive an abstract soul mirror.
+- Pure mode remains the no-camera fallback and should share the same session engine.
+- The mirror preserves facial structure as topology and motion; it must not render a normal camera feed, realistic avatar, identity cues, skin tone reconstruction, age/gender/beauty cues, or emotion labels.
+- User-facing language may say expression signals or facial movement signals. It must not say emotion recognition or claim to detect stress, anxiety, mood, health, or biological battery level.
 
 ## Architecture
 
@@ -21,6 +25,7 @@ Create an adaptive audiovisual presence that meets the user at their current vel
 - Browser-native WebGL2, Web Audio, Media Capture, Device Motion, IndexedDB, and Service Worker APIs.
 - Pure TypeScript domain modules between sensors and the resonance engine.
 - Semantic CSS only. No Tailwind, utility chains, inline presentation styles, or CSS-in-JS.
+- MediaPipe Tasks Vision is isolated behind `src/sensing/face-landmarker-client.ts` and `src/sensing/mirror-signal-adapter.ts`; session state and renderers consume normalized signals only.
 
 ## Commands
 
