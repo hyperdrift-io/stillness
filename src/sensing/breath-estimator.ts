@@ -53,6 +53,8 @@ function percentile(sorted: readonly number[], position: number): number {
 export class BreathEstimator {
   private readonly trace: TraceSample[] = [];
   private readonly cycleHistory: BreathCycle[] = [];
+  private lastSignal: BreathSignal = { ...emptyBreathSignal };
+  private lastObservedTimestampMs: number | null = null;
   private lastTimestampMs: number | null = null;
   private lastRawSample = 0;
   private fastEma = 0;
@@ -64,22 +66,23 @@ export class BreathEstimator {
   update(snapshot: PerceptionSnapshot): BreathSignal {
     const timestampMs = snapshot.timestampMs;
     if (!Number.isFinite(timestampMs)) return { ...emptyBreathSignal };
+    if (this.lastObservedTimestampMs !== null && timestampMs <= this.lastObservedTimestampMs) {
+      return { ...this.lastSignal };
+    }
+    this.lastObservedTimestampMs = timestampMs;
 
     this.prune(timestampMs);
     const visibility = this.visibility(snapshot);
-    if (visibility <= 0) return this.signal(timestampMs, 0);
+    if (visibility <= 0) return this.emitSignal(timestampMs, 0);
 
     const shoulderY = (snapshot.shoulders.leftY + snapshot.shoulders.rightY) * 0.5;
     const rawSample = shoulderY - snapshot.faceCenterY * 0.25;
-    if (!Number.isFinite(rawSample)) return this.signal(timestampMs, 0);
-
-    if (this.lastTimestampMs !== null && timestampMs <= this.lastTimestampMs) {
-      return this.signal(timestampMs, visibility);
-    }
+    if (!Number.isFinite(rawSample)) return this.emitSignal(timestampMs, 0);
 
     if (this.lastTimestampMs === null || timestampMs - this.lastTimestampMs > MAX_SAMPLE_GAP_MS) {
+      if (this.lastTimestampMs !== null) this.clearContinuity();
       this.beginContinuity(rawSample, timestampMs, visibility);
-      return this.signal(timestampMs, visibility);
+      return this.emitSignal(timestampMs, visibility);
     }
 
     const elapsedMs = timestampMs - this.lastTimestampMs;
@@ -91,7 +94,7 @@ export class BreathEstimator {
     if (Math.abs(rawSample - this.lastRawSample) > allowedStep) {
       this.clearContinuity();
       this.beginContinuity(rawSample, timestampMs, visibility);
-      return this.signal(timestampMs, visibility);
+      return this.emitSignal(timestampMs, visibility);
     }
 
     const fastAlpha = 1 - Math.exp(-elapsedSeconds / FAST_EMA_SECONDS);
@@ -115,11 +118,12 @@ export class BreathEstimator {
     this.previousDetrended = detrended;
     this.previousDetrendedTimestampMs = timestampMs;
     this.prune(timestampMs);
-    return this.signal(timestampMs, visibility);
+    return this.emitSignal(timestampMs, visibility);
   }
 
   reset(): void {
     this.clearContinuity();
+    this.lastObservedTimestampMs = null;
   }
 
   private visibility(snapshot: PerceptionSnapshot): number {
@@ -150,6 +154,7 @@ export class BreathEstimator {
     this.previousDetrended = 0;
     this.previousDetrendedTimestampMs = null;
     this.lastPositiveCrossingMs = null;
+    this.lastSignal = { ...emptyBreathSignal };
   }
 
   private recordPositiveCrossing(timestampMs: number): void {
@@ -159,19 +164,18 @@ export class BreathEstimator {
     }
 
     const intervalMs = timestampMs - this.lastPositiveCrossingMs;
-    if (intervalMs < MIN_CYCLE_MS) return;
-    if (intervalMs > MAX_CYCLE_MS) {
+    const previousCrossingMs = this.lastPositiveCrossingMs;
+    this.lastPositiveCrossingMs = timestampMs;
+    if (intervalMs < MIN_CYCLE_MS || intervalMs > MAX_CYCLE_MS) {
       this.cycleHistory.length = 0;
-      this.lastPositiveCrossingMs = timestampMs;
       return;
     }
 
     this.cycleHistory.push({
-      startMs: this.lastPositiveCrossingMs,
+      startMs: previousCrossingMs,
       endMs: timestampMs,
       intervalMs,
     });
-    this.lastPositiveCrossingMs = timestampMs;
   }
 
   private prune(timestampMs: number): void {
@@ -225,5 +229,10 @@ export class BreathEstimator {
     }
 
     return { phase, regularity, amplitude, confidence, cycles };
+  }
+
+  private emitSignal(timestampMs: number, currentVisibility: number): BreathSignal {
+    this.lastSignal = this.signal(timestampMs, currentVisibility);
+    return { ...this.lastSignal };
   }
 }
