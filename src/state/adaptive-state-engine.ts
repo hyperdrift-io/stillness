@@ -18,7 +18,10 @@ const CONFIGURED_WEIGHTS: Record<AdaptiveSignal, number> = {
 const SCENE_BANDS = [0, 0.22, 0.42, 0.62, 0.82] as const;
 const HIGHER_SCENE_SUPPORT_MS = 4_000;
 const LOWER_SCENE_SUPPORT_MS = 6_000;
-const MAX_CONTINUOUS_STEP_MS = 250;
+const MAX_SCENE_MIX_STEP_MS = 250;
+const MAX_EVIDENCE_CONTINUITY_GAP_MS = 1_000;
+const PERCEPTION_SAMPLE_GRACE_MS = 250;
+const PERCEPTION_SAMPLE_STALE_MS = 1_000;
 const MAX_TEMPORAL_SAMPLE_GAP_MS = 1_000;
 const TEMPORAL_CONFIDENCE_MS = 3_000;
 const TEMPORAL_EMA_SECONDS = 1.5;
@@ -42,6 +45,17 @@ type TemporalSample = {
   movementConfidence: number;
   facialConfidence: number;
   breathConfidence: number;
+};
+
+type FrameStep = {
+  animationDeltaMs: number;
+  evidenceDeltaMs: number;
+};
+
+type PerceptionFreshness = {
+  evidenceConfidence: number;
+  visualConfidence: number;
+  timestampCurrent: boolean;
 };
 
 function clampRange(value: number, minimum: number, maximum: number, fallback: number): number {
@@ -130,17 +144,31 @@ export class AdaptiveStateEngine {
   private candidateSupportedMs = 0;
   private lastNowMs: number | null = null;
   private previousProgress: number | null = null;
+  private trendReferenceProgress: number | null = null;
   private trend = 0;
   private temporalCoherence = 0.5;
   private temporalEvidenceMs = 0;
   private previousTemporalSample: TemporalSample | null = null;
+  private lastPerceptionTimestampMs: number | null = null;
+  private lastUniquePerceptionReceivedAtMs: number | null = null;
 
   update(input: AdaptiveStateInput): AdaptiveState {
+    const frameStep = this.frameStep(input.nowMs);
+    const perceptionFreshness = this.perceptionFreshness(
+      input.perception.timestampMs,
+      input.nowMs,
+    );
     const sensitivity = clampRange(input.tuning.signalSensitivity, 0.75, 1.25, 1);
-    const faceConfidence = input.perception.facePresent
+    const currentFaceConfidence = input.perception.facePresent
       ? clamp01(input.perception.faceConfidence)
       : 0;
-    const cameraMotionConfidence = clamp01(input.perception.quality);
+    const evidenceFaceConfidence = currentFaceConfidence
+      * perceptionFreshness.evidenceConfidence;
+    const currentCameraMotionConfidence = clamp01(input.perception.quality);
+    const visualCameraMotionConfidence = currentCameraMotionConfidence
+      * perceptionFreshness.visualConfidence;
+    const evidenceCameraMotionConfidence = currentCameraMotionConfidence
+      * perceptionFreshness.evidenceConfidence;
     const deviceMotionConfidence = clamp01(input.deviceMotion.confidence);
 
     const normalizedCameraMovement = calibrationRelativeLevel(
@@ -151,16 +179,16 @@ export class AdaptiveStateEngine {
     );
     const normalizedDeviceMovement = clamp01(input.deviceMotion.energy * sensitivity);
     const movementChannels = [
-      { value: normalizedCameraMovement, confidence: cameraMotionConfidence },
+      { value: normalizedCameraMovement, confidence: visualCameraMotionConfidence },
       { value: normalizedDeviceMovement, confidence: deviceMotionConfidence },
     ];
     const normalizedMovement = weightedValue(movementChannels);
     const movementX = weightedSignedValue([
-      { value: input.perception.motion.x, confidence: cameraMotionConfidence },
+      { value: input.perception.motion.x, confidence: visualCameraMotionConfidence },
       { value: input.deviceMotion.x, confidence: deviceMotionConfidence },
     ]);
     const movementY = weightedSignedValue([
-      { value: input.perception.motion.y, confidence: cameraMotionConfidence },
+      { value: input.perception.motion.y, confidence: visualCameraMotionConfidence },
       { value: input.deviceMotion.y, confidence: deviceMotionConfidence },
     ]);
 
@@ -174,15 +202,21 @@ export class AdaptiveStateEngine {
     const expressiveActivation = clamp01(input.perception.facial.activity * sensitivity);
     const breathPhase = clamp01(input.breath.phase);
     const breathRegularity = clamp01(input.breath.regularity);
-    const rawBreathConfidence = clamp01(input.breath.confidence);
+    const currentBreathConfidence = clamp01(input.breath.confidence);
+    const visualBreathConfidence = currentBreathConfidence
+      * perceptionFreshness.visualConfidence;
+    const visualBreathRegularity = breathRegularity
+      * perceptionFreshness.visualConfidence;
+    const evidenceBreathConfidence = currentBreathConfidence
+      * perceptionFreshness.evidenceConfidence;
 
     const calibrationTerminal = input.calibration.phase === 'ready'
       || input.calibration.phase === 'limited';
     const calibratedFaceConfidence = calibrationTerminal
-      ? faceConfidence * clamp01(input.calibration.faceConfidence)
+      ? evidenceFaceConfidence * clamp01(input.calibration.faceConfidence)
       : 0;
     const calibratedCameraMotionConfidence = calibrationTerminal
-      ? cameraMotionConfidence * clamp01(input.calibration.shoulderConfidence)
+      ? evidenceCameraMotionConfidence * clamp01(input.calibration.shoulderConfidence)
       : 0;
     const progressMovement = weightedValue([
       { value: normalizedCameraMovement, confidence: calibratedCameraMotionConfidence },
@@ -193,7 +227,7 @@ export class AdaptiveStateEngine {
       { value: 0, confidence: deviceMotionConfidence },
     ]);
     const calibratedBreathConfidence = calibrationTerminal
-      ? rawBreathConfidence
+      ? evidenceBreathConfidence
         * Math.min(
           clamp01(input.calibration.faceConfidence),
           clamp01(input.calibration.shoulderConfidence),
@@ -203,9 +237,12 @@ export class AdaptiveStateEngine {
       ? calibratedBreathConfidence
       : 0;
 
-    const frameDeltaMs = this.frameDelta(input.nowMs);
     const temporalConfidence = this.updateTemporalCoherence({
-      timestampMs: this.temporalTimestamp(input, deviceMotionConfidence),
+      timestampMs: this.temporalTimestamp(
+        input,
+        perceptionFreshness,
+        deviceMotionConfidence,
+      ),
       movementEnergy: progressMovement,
       facialTension: normalizedTension,
       expressiveActivation,
@@ -217,7 +254,7 @@ export class AdaptiveStateEngine {
 
     const movementStability = clamp01(1 - progressMovement);
     const facialRelease = clamp01(1 - normalizedTension);
-    const breathing = rawBreathConfidence > BREATH_CONFIDENCE_THRESHOLD
+    const breathing = evidenceBreathConfidence > BREATH_CONFIDENCE_THRESHOLD
       ? breathRegularity
       : 0;
     const coherence = this.temporalCoherence;
@@ -258,10 +295,14 @@ export class AdaptiveStateEngine {
       progress = clamp01(progress);
     }
 
-    this.updateTrend(progress, frameDeltaMs, rawEffectiveWeight > WEIGHT_EPSILON);
+    this.updateTrend(
+      progress,
+      frameStep.evidenceDeltaMs,
+      rawEffectiveWeight > WEIGHT_EPSILON,
+    );
     this.updateScene(
       progress,
-      frameDeltaMs,
+      frameStep,
       rawEffectiveWeight > WEIGHT_EPSILON,
       input.tuning.transitionSeconds,
     );
@@ -272,16 +313,18 @@ export class AdaptiveStateEngine {
       sceneMix: clamp01(this.sceneMix),
       progress,
       trend: clampSigned(this.trend),
-      facialTension: normalizedTension,
-      facialWarmth,
-      expressiveActivation,
+      facialTension: clamp01(normalizedTension * perceptionFreshness.visualConfidence),
+      facialWarmth: clamp01(facialWarmth * perceptionFreshness.visualConfidence),
+      expressiveActivation: clamp01(
+        expressiveActivation * perceptionFreshness.visualConfidence,
+      ),
       movementEnergy: normalizedMovement,
       movementX,
       movementY,
       postureStability: clamp01(1 - normalizedMovement),
       breathPhase,
-      breathRegularity,
-      breathConfidence: rawBreathConfidence,
+      breathRegularity: visualBreathRegularity,
+      breathConfidence: visualBreathConfidence,
       temporalCoherence: clamp01(this.temporalCoherence),
       overallConfidence: clamp01(rawEffectiveWeight),
       contributions,
@@ -295,47 +338,100 @@ export class AdaptiveStateEngine {
     this.candidateSupportedMs = 0;
     this.lastNowMs = null;
     this.previousProgress = null;
+    this.trendReferenceProgress = null;
     this.trend = 0;
     this.temporalCoherence = 0.5;
     this.temporalEvidenceMs = 0;
     this.previousTemporalSample = null;
+    this.lastPerceptionTimestampMs = null;
+    this.lastUniquePerceptionReceivedAtMs = null;
   }
 
-  private frameDelta(nowMs: number): number {
-    if (!Number.isFinite(nowMs)) return 0;
+  private frameStep(nowMs: number): FrameStep {
+    if (!Number.isFinite(nowMs)) {
+      this.lastNowMs = null;
+      this.resetEvidenceContinuity();
+      return { animationDeltaMs: 0, evidenceDeltaMs: 0 };
+    }
     if (this.lastNowMs === null) {
       this.lastNowMs = nowMs;
-      return 0;
+      return { animationDeltaMs: 0, evidenceDeltaMs: 0 };
     }
     const elapsedMs = nowMs - this.lastNowMs;
     this.lastNowMs = nowMs;
-    if (elapsedMs <= 0) {
-      this.candidateScene = null;
-      this.candidateSupportedMs = 0;
-      return 0;
+    if (elapsedMs <= 0 || elapsedMs >= MAX_EVIDENCE_CONTINUITY_GAP_MS) {
+      this.resetEvidenceContinuity();
+      return {
+        animationDeltaMs: elapsedMs > 0
+          ? Math.min(elapsedMs, MAX_SCENE_MIX_STEP_MS)
+          : 0,
+        evidenceDeltaMs: 0,
+      };
     }
-    return Math.min(elapsedMs, MAX_CONTINUOUS_STEP_MS);
+    return {
+      animationDeltaMs: Math.min(elapsedMs, MAX_SCENE_MIX_STEP_MS),
+      evidenceDeltaMs: elapsedMs,
+    };
   }
 
-  private temporalTimestamp(input: AdaptiveStateInput, deviceConfidence: number): number {
+  private perceptionFreshness(timestampMs: number, nowMs: number): PerceptionFreshness {
+    if (!Number.isFinite(timestampMs) || timestampMs <= 0 || !Number.isFinite(nowMs)) {
+      return { evidenceConfidence: 0, visualConfidence: 0, timestampCurrent: false };
+    }
+    if (timestampMs !== this.lastPerceptionTimestampMs) {
+      this.lastPerceptionTimestampMs = timestampMs;
+      this.lastUniquePerceptionReceivedAtMs = nowMs;
+      return { evidenceConfidence: 1, visualConfidence: 1, timestampCurrent: true };
+    }
+    if (this.lastUniquePerceptionReceivedAtMs === null) {
+      return { evidenceConfidence: 0, visualConfidence: 0, timestampCurrent: false };
+    }
+
+    const ageMs = nowMs - this.lastUniquePerceptionReceivedAtMs;
+    if (ageMs < 0) {
+      this.lastUniquePerceptionReceivedAtMs = null;
+      return { evidenceConfidence: 0, visualConfidence: 0, timestampCurrent: false };
+    }
+    if (ageMs <= PERCEPTION_SAMPLE_GRACE_MS) {
+      return { evidenceConfidence: 1, visualConfidence: 1, timestampCurrent: true };
+    }
+    if (ageMs >= PERCEPTION_SAMPLE_STALE_MS) {
+      return { evidenceConfidence: 0, visualConfidence: 0, timestampCurrent: false };
+    }
+    return {
+      evidenceConfidence: 0,
+      visualConfidence: clamp01(
+        1 - (ageMs - PERCEPTION_SAMPLE_GRACE_MS)
+          / (PERCEPTION_SAMPLE_STALE_MS - PERCEPTION_SAMPLE_GRACE_MS),
+      ),
+      timestampCurrent: false,
+    };
+  }
+
+  private temporalTimestamp(
+    input: AdaptiveStateInput,
+    freshness: PerceptionFreshness,
+    deviceConfidence: number,
+  ): number {
     const perceptionTimestamp = input.perception.timestampMs;
-    const hasCameraEvidence = input.perception.facePresent
-      || input.perception.shoulders.visible
-      || input.perception.quality > 0
-      || input.breath.confidence > 0;
-    if (hasCameraEvidence && Number.isFinite(perceptionTimestamp) && perceptionTimestamp > 0) {
+    if (freshness.timestampCurrent) {
       return perceptionTimestamp;
     }
-    return deviceConfidence > 0 && Number.isFinite(input.nowMs) ? input.nowMs : Number.NaN;
+    if (deviceConfidence > 0 && Number.isFinite(input.nowMs)) return input.nowMs;
+    return freshness.visualConfidence > 0 ? perceptionTimestamp : Number.NaN;
   }
 
   private updateTemporalCoherence(sample: TemporalSample): number {
     if (!Number.isFinite(sample.timestampMs)) {
-      this.previousTemporalSample = null;
-      this.temporalEvidenceMs = 0;
+      this.resetTemporalEvidence(null);
       return 0;
     }
     const previous = this.previousTemporalSample;
+    const observationConfidence = this.temporalObservationConfidence(sample);
+    if (observationConfidence <= WEIGHT_EPSILON) {
+      this.resetTemporalEvidence(sample);
+      return 0;
+    }
     if (!previous) {
       this.previousTemporalSample = sample;
       this.temporalEvidenceMs = 0;
@@ -344,13 +440,11 @@ export class AdaptiveStateEngine {
     const elapsedMs = sample.timestampMs - previous.timestampMs;
     if (elapsedMs === 0) return this.temporalConfidence(sample);
     if (elapsedMs < 0) {
-      this.previousTemporalSample = sample;
-      this.temporalEvidenceMs = 0;
+      this.resetTemporalEvidence(sample);
       return 0;
     }
-    if (elapsedMs > MAX_TEMPORAL_SAMPLE_GAP_MS) {
-      this.previousTemporalSample = sample;
-      this.temporalEvidenceMs = 0;
+    if (elapsedMs >= MAX_TEMPORAL_SAMPLE_GAP_MS) {
+      this.resetTemporalEvidence(sample);
       return 0;
     }
 
@@ -366,17 +460,17 @@ export class AdaptiveStateEngine {
       sample.breathConfidence,
       previous.breathConfidence,
     );
+    const facialDelta = (
+      Math.abs(sample.facialTension - previous.facialTension)
+      + Math.abs(sample.expressiveActivation - previous.expressiveActivation)
+    ) * 0.5;
     const deltaChannels = [
       {
         value: Math.abs(sample.movementEnergy - previous.movementEnergy),
         confidence: movementPairConfidence,
       },
       {
-        value: Math.abs(sample.facialTension - previous.facialTension),
-        confidence: facialPairConfidence,
-      },
-      {
-        value: Math.abs(sample.expressiveActivation - previous.expressiveActivation),
+        value: facialDelta,
         confidence: facialPairConfidence,
       },
       {
@@ -400,39 +494,63 @@ export class AdaptiveStateEngine {
   }
 
   private temporalConfidence(sample: TemporalSample): number {
-    const observationConfidence = combineConfidence([
+    return clamp01(
+      this.temporalObservationConfidence(sample)
+        * (this.temporalEvidenceMs / TEMPORAL_CONFIDENCE_MS),
+    );
+  }
+
+  private temporalObservationConfidence(sample: TemporalSample): number {
+    return combineConfidence([
       { value: 0, confidence: sample.movementConfidence },
       { value: 0, confidence: sample.facialConfidence },
       { value: 0, confidence: sample.breathConfidence },
     ]);
-    return clamp01(
-      observationConfidence * (this.temporalEvidenceMs / TEMPORAL_CONFIDENCE_MS),
-    );
+  }
+
+  private resetEvidenceContinuity(): void {
+    this.candidateScene = null;
+    this.candidateSupportedMs = 0;
+    this.trendReferenceProgress = null;
+    this.trend = 0;
+    this.resetTemporalEvidence(null);
+  }
+
+  private resetTemporalEvidence(sample: TemporalSample | null): void {
+    this.temporalCoherence = 0.5;
+    this.temporalEvidenceMs = 0;
+    this.previousTemporalSample = sample;
   }
 
   private updateTrend(progress: number, elapsedMs: number, hasEvidence: boolean): void {
-    if (elapsedMs <= 0) return;
-    const elapsedSeconds = elapsedMs / 1_000;
     if (!hasEvidence) {
-      this.trend *= Math.exp(-elapsedSeconds / TEMPORAL_EMA_SECONDS);
+      if (elapsedMs > 0) {
+        this.trend *= Math.exp(-(elapsedMs / 1_000) / TEMPORAL_EMA_SECONDS);
+      }
+      this.trendReferenceProgress = null;
       return;
     }
-    if (this.previousProgress === null) return;
-    const rate = (progress - this.previousProgress) / elapsedSeconds;
+    if (elapsedMs <= 0 || this.trendReferenceProgress === null) {
+      this.trendReferenceProgress = progress;
+      return;
+    }
+    const elapsedSeconds = elapsedMs / 1_000;
+    const rate = (progress - this.trendReferenceProgress) / elapsedSeconds;
     const instantaneousTrend = clampSigned(rate / TREND_FULL_SCALE_PER_SECOND);
     const alpha = 1 - Math.exp(-elapsedSeconds / TEMPORAL_EMA_SECONDS);
     this.trend += (instantaneousTrend - this.trend) * alpha;
+    this.trendReferenceProgress = progress;
   }
 
   private updateScene(
     progress: number,
-    elapsedMs: number,
+    frameStep: FrameStep,
     hasEvidence: boolean,
     transitionSeconds: number,
   ): void {
     const transitionMs = clampRange(transitionSeconds, 3, 6, 4.5) * 1_000;
-    if (this.sceneMix < 1 && elapsedMs > 0) {
-      this.sceneMix = clamp01(this.sceneMix + elapsedMs / transitionMs);
+    if (this.sceneMix < 1 && frameStep.animationDeltaMs > 0) {
+      this.sceneMix = clamp01(this.sceneMix + frameStep.animationDeltaMs / transitionMs);
     }
     if (this.sceneMix < 1) return;
     if (!hasEvidence) {
@@ -451,7 +569,7 @@ export class AdaptiveStateEngine {
       this.candidateScene = desiredScene;
       this.candidateSupportedMs = 0;
     } else {
-      this.candidateSupportedMs += elapsedMs;
+      this.candidateSupportedMs += frameStep.evidenceDeltaMs;
     }
 
     const isHigher = sceneIndex(desiredScene) > sceneIndex(this.scene);
