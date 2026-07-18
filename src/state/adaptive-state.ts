@@ -5,6 +5,10 @@ import type {
   CameraPalette,
   PerceptionSnapshot,
 } from '../sensing/perception-signal.ts';
+import type {
+  AdaptiveVisualControlFrame,
+  RequestedRendererQuality,
+} from '../visual/adaptive-visual-state.ts';
 
 export const adaptiveScenes = [
   'turbulence',
@@ -54,7 +58,7 @@ export type AdaptiveTuning = {
   colorInfluence: number;
   transitionSeconds: number;
   visualIntensity: number;
-  quality: 'auto' | 'high' | 'balanced' | 'reduced';
+  quality: RequestedRendererQuality;
 };
 
 export type AdaptiveStateInput = {
@@ -64,33 +68,6 @@ export type AdaptiveStateInput = {
   deviceMotion: { energy: number; x: number; y: number; confidence: number };
   tuning: AdaptiveTuning;
   nowMs: number;
-};
-
-/**
- * Structural hand-off to the adaptive renderer introduced in Task 6. Keeping
- * the mapping here makes the controller independent of React preference state.
- */
-export type AdaptiveVisualControlFrame = {
-  scene: AdaptiveScene;
-  sceneMix: number;
-  progress: number;
-  movementEnergy: number;
-  movementX: number;
-  movementY: number;
-  facialTension: number;
-  facialWarmth: number;
-  expressiveActivation: number;
-  breathPhase: number;
-  breathConfidence: number;
-  coherence: number;
-  palette: CameraPalette;
-  topologySegments: Float32Array;
-  colorInfluence: number;
-  visualIntensity: number;
-  transitionSeconds: number;
-  requestedQuality: AdaptiveTuning['quality'];
-  variationSeed: number;
-  reducedMotion: boolean;
 };
 
 function clampRange(value: number, minimum: number, maximum: number, fallback: number): number {
