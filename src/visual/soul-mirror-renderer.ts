@@ -9,6 +9,7 @@ import type {
 } from './adaptive-visual-state.ts';
 
 const MAX_LEGACY_TOPOLOGY_SEGMENTS = 4_096;
+const AUTOMATIC_VARIATION_INTERVAL_MS = 18_000;
 const neutralPalette = {
   shadow: [0, 0, 0] as const,
   mid: [0.035, 0.055, 0.11] as const,
@@ -65,6 +66,9 @@ export class SoulMirrorRenderer {
   private contextLost = false;
   private listenersAttached = false;
   private reducedMotionQuery: MediaQueryList | null = null;
+  private variationSeed = 0;
+  private automaticVariation = true;
+  private variationStartedAt = 0;
   private metrics: RendererMetrics = {
     fps: 0,
     frameTimeMs: 0,
@@ -96,9 +100,18 @@ export class SoulMirrorRenderer {
   }
 
   update(frame: AdaptiveVisualControlFrame | SessionRenderFrame): void {
+    const previousScene = this.target?.scene;
     this.target = isAdaptiveVisualFrame(frame)
       ? frame
       : this.mapLegacyFrame(frame);
+    if (previousScene !== this.target.scene) this.variationStartedAt = performance.now();
+    this.pushTargetToCore();
+  }
+
+  setVariation(seed: number, automatic: boolean): void {
+    this.variationSeed = Number.isFinite(seed) ? Math.trunc(seed) : 0;
+    this.automaticVariation = automatic;
+    this.variationStartedAt = performance.now();
     this.pushTargetToCore();
   }
 
@@ -163,8 +176,13 @@ export class SoulMirrorRenderer {
 
   private pushTargetToCore(): void {
     if (!this.running || this.contextLost || !this.core || !this.target) return;
+    const elapsed = Math.max(0, performance.now() - this.variationStartedAt);
+    const automaticOffset = this.automaticVariation
+      ? Math.floor(elapsed / AUTOMATIC_VARIATION_INTERVAL_MS)
+      : 0;
     this.core.update({
       ...this.target,
+      variationSeed: this.variationSeed + automaticOffset,
       reducedMotion: this.target.reducedMotion || this.prefersReducedMotion(),
     });
   }
@@ -341,7 +359,7 @@ export class SoulMirrorRenderer {
       visualIntensity: 1,
       transitionSeconds: 4.5,
       requestedQuality: 'auto',
-      variationSeed: 17,
+      variationSeed: this.variationSeed,
       reducedMotion: false,
     };
   }

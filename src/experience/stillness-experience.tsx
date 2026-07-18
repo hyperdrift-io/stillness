@@ -71,6 +71,7 @@ export function StillnessExperience() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const controllerRef = useRef<SessionController | null>(null);
+  const rendererRef = useRef<SoulMirrorRenderer | null>(null);
   const controllerTokenRef = useRef<SessionToken | null>(null);
   const transitionsRef = useRef(new SessionTransitions());
   const guidancePolicyRef = useRef(new GuidancePolicy());
@@ -114,8 +115,8 @@ export function StillnessExperience() {
   }, []);
 
   const togglePreference = useCallback((
-    preference: 'mode' | 'sound' | 'liveSignals' | 'camera',
-    enabled: boolean | SessionPreferences['mode'],
+    preference: 'mode' | 'sound' | 'liveSignals' | 'camera' | 'visualControl',
+    enabled: boolean | SessionPreferences['mode'] | SessionPreferences['visualControl'],
   ) => {
     if (preference === 'mode') {
       const nextMode = enabled === 'guided' ? 'guided' : 'pure';
@@ -128,6 +129,13 @@ export function StillnessExperience() {
       } else {
         setCue(null);
       }
+      return;
+    }
+
+    if (preference === 'visualControl') {
+      const visualControl = enabled === 'locked' ? 'locked' : 'auto';
+      setPreferences((current) => ({ ...current, visualControl }));
+      trackEvent('session_preference_changed', { preference, enabled: visualControl });
       return;
     }
 
@@ -170,6 +178,13 @@ export function StillnessExperience() {
       variationSeed: current.variationSeed + 1,
     }));
   }, []);
+
+  useEffect(() => {
+    rendererRef.current?.setVariation(
+      preferences.variationSeed,
+      preferences.visualControl === 'auto',
+    );
+  }, [preferences.variationSeed, preferences.visualControl]);
 
   useEffect(() => {
     const localDevelopment = window.location.hostname === 'localhost'
@@ -241,6 +256,9 @@ export function StillnessExperience() {
         case 'camera':
           togglePreference('camera', !preferences.camera);
           break;
+        case 'variation':
+          nextVariation();
+          break;
       }
     };
     const onVisibilityChange = () => {
@@ -252,7 +270,7 @@ export function StillnessExperience() {
       window.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [leave, menuOpen, mode, preferences, togglePreference]);
+  }, [leave, menuOpen, mode, nextVariation, preferences, togglePreference]);
 
   async function begin(): Promise<void> {
     const canvas = canvasRef.current;
@@ -271,8 +289,11 @@ export function StillnessExperience() {
     let controller: SessionController | null = null;
     try {
       const camera = new MirrorSignalAdapter();
+      const renderer = new SoulMirrorRenderer(canvas);
+      renderer.setVariation(preferences.variationSeed, preferences.visualControl === 'auto');
+      rendererRef.current = renderer;
       controller = new SessionController({
-        renderer: new SoulMirrorRenderer(canvas),
+        renderer,
         audio: new StillnessAudio(),
         camera,
         motion: new MotionSensor(),

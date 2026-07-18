@@ -35,7 +35,7 @@ export const defaultSessionPreferences: SessionPreferences = Object.freeze({
   },
 });
 
-export type SessionCommand = 'menu' | 'sound' | 'guidance' | 'signals' | 'camera';
+export type SessionCommand = 'menu' | 'sound' | 'guidance' | 'signals' | 'camera' | 'variation';
 
 export function commandForKey(input: {
   key: string;
@@ -49,5 +49,6 @@ export function commandForKey(input: {
   if (key === 'g') return 'guidance';
   if (key === 'd') return 'signals';
   if (key === 'c') return 'camera';
+  if (key === 'v') return 'variation';
   return null;
 }

@@ -416,6 +416,21 @@
     min-block-size: 2.75rem;
     cursor: pointer;
   }
+  dialog.session-menu button.menu-action {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: var(--space-s);
+    min-block-size: 2.75rem;
+    padding: 0;
+    color: var(--color-text);
+    background: transparent;
+    text-align: start;
+  }
+  dialog.session-menu button.menu-action:hover,
+  dialog.session-menu button.menu-action:focus-visible {
+    color: var(--color-ember-bright);
+  }
   dialog.session-menu input { accent-color: var(--color-ember-bright); }
   dialog.session-menu kbd {
     color: var(--color-muted);

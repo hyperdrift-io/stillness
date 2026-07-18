@@ -341,11 +341,51 @@ vec3 radianceGrammar(vec2 point, float time) {
 }
 
 vec3 sceneGrammar(float scene, vec2 point, float time) {
-  if (scene < 0.5) return turbulenceGrammar(point, time);
-  if (scene < 1.5) return gatheringGrammar(point, time);
-  if (scene < 2.5) return coherenceGrammar(point, time);
-  if (scene < 3.5) return releaseGrammar(point, time);
-  return radianceGrammar(point, time);
+  float variant = mod(floor(abs(uVariationSeed)), 3.0);
+  vec2 grammarPoint = point;
+  if (variant > 0.5 && variant < 1.5) {
+    grammarPoint = vec2(
+      point.x * 0.78,
+      point.y + sin(point.x * 7.0 + time * 0.24) * 0.075
+    );
+  } else if (variant > 1.5) {
+    float radius = length(point);
+    float twist = radius * 2.4 + sin(time * 0.16) * 0.08;
+    grammarPoint = mat2(cos(twist), -sin(twist), sin(twist), cos(twist)) * point;
+  }
+
+  vec3 base;
+  vec3 accent;
+  if (scene < 0.5) {
+    base = turbulenceGrammar(grammarPoint, time);
+    accent = vec3(1.0, 0.12, 0.08);
+  } else if (scene < 1.5) {
+    base = gatheringGrammar(grammarPoint, time);
+    accent = vec3(1.0, 0.63, 0.12);
+  } else if (scene < 2.5) {
+    base = coherenceGrammar(grammarPoint, time);
+    accent = vec3(0.76, 0.48, 1.0);
+  } else if (scene < 3.5) {
+    base = releaseGrammar(grammarPoint, time);
+    accent = vec3(0.43, 0.78, 1.0);
+  } else {
+    base = radianceGrammar(grammarPoint, time);
+    accent = vec3(0.94, 0.98, 1.0);
+  }
+
+  float radius = length(point);
+  float ridge = lineBand(
+    sin(point.y * 52.0 + sin(point.x * 8.0 + time * 0.18) * 2.8),
+    0.026
+  ) * (1.0 - smoothstep(0.12, 0.82, radius));
+  float corona = lineBand(
+    sin(atan(point.y, point.x) * 14.0 + radius * 31.0 - time * 0.22),
+    0.030
+  ) * (1.0 - smoothstep(0.08, 0.72, radius));
+  float signature = variant > 0.5 && variant < 1.5
+    ? ridge * 0.075
+    : (variant > 1.5 ? corona * 0.065 : 0.0);
+  return base + accent * signature;
 }
 
 void main() {
@@ -364,7 +404,7 @@ void main() {
   float mixAmount = smoothstep(0.0, 1.0, clamp(uSceneMix, 0.0, 1.0));
   vec3 emission = mix(previous, target, mixAmount);
 
-  // Compatible variation changes fine texture only, never palette or meaning.
+  // Variation changes geometry while preserving the state-led palette and meaning.
   float variation = 0.96 + 0.08 * noise21(
     point * 7.0 + vec2(uVariationSeed * 0.017, uVariationSeed * 0.031)
   );

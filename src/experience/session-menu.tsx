@@ -6,8 +6,8 @@ import type { SessionPreferences, SessionTuning } from './session-preferences.ts
 
 type TelemetryDirection = SessionTelemetry['direction'];
 type TelemetrySource = SessionTelemetry['source'];
-type Preference = 'mode' | 'sound' | 'liveSignals' | 'camera';
-type PreferenceValue = boolean | SessionPreferences['mode'];
+type Preference = 'mode' | 'sound' | 'liveSignals' | 'camera' | 'visualControl';
+type PreferenceValue = boolean | SessionPreferences['mode'] | SessionPreferences['visualControl'];
 type DialogLifecycle = Pick<HTMLDialogElement, 'close' | 'open'>;
 type FocusTarget = Pick<HTMLElement, 'focus'>;
 
@@ -98,6 +98,7 @@ export function SessionMenu({
   open,
   triggerRef,
   onToggle,
+  onNextVariation,
   onClose,
   onLeave,
 }: SessionMenuProps) {
@@ -180,6 +181,19 @@ export function SessionMenu({
           />
           <span>Camera sensing</span>
           <kbd aria-label="Keyboard shortcut C">C</kbd>
+        </label>
+        <button type="button" className="menu-action" onClick={onNextVariation}>
+          <span>Next visual</span>
+          <kbd aria-label="Keyboard shortcut V">V</kbd>
+        </button>
+        <label>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={preferences.visualControl === 'auto'}
+            onChange={(event) => onToggle('visualControl', event.currentTarget.checked ? 'auto' : 'locked')}
+          />
+          <span>Automatic visual cycle</span>
         </label>
       </fieldset>
 
