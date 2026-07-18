@@ -49,11 +49,21 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 function mirrorProgressLabel(telemetry: SessionTelemetry): string {
   if (telemetry.source === 'scripted') return 'Finding a gentle rhythm';
-  if (telemetry.readiness >= 0.68) return 'Readiness returning';
-  if (telemetry.relief >= 0.68) return 'Stillness deepening';
-  if (telemetry.relief >= 0.42) return 'Relief arriving';
-  if (telemetry.direction === 'settling' || telemetry.softness >= 0.52) return 'Signals softening';
-  return 'Meeting your rhythm';
+  if (telemetry.sensingQuality < 0.25) return 'Mirror finding your signal';
+  if (telemetry.direction === 'rising' && telemetry.turbulence >= 0.45) {
+    return 'Turbulence rising · lengthen the exhale';
+  }
+  if (telemetry.direction === 'settling') {
+    return telemetry.relief >= 0.68
+      ? 'The clearing is widening · stay with this'
+      : 'The clearing is opening · stay with this';
+  }
+  if (telemetry.readiness >= 0.68) return 'Clear and ready when you are';
+  if (telemetry.relief >= 0.68) return 'More space is opening';
+  if (telemetry.expressionActivity >= 0.42 || telemetry.movement >= 0.42) {
+    return 'Energy rising · soften the jaw';
+  }
+  return 'The light is steady · let the exhale lengthen';
 }
 
 export function StillnessExperience() {
@@ -376,7 +386,11 @@ export function StillnessExperience() {
       {mode === 'active' ? (
         <>
           {preferences.mode === 'mirror' ? (
-            <p className="mirror-progress" aria-live="polite">
+            <p
+              className="mirror-progress"
+              data-direction={telemetry.direction}
+              aria-live="polite"
+            >
               {mirrorProgressLabel(telemetry)}
             </p>
           ) : null}

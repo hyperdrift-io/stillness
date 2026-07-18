@@ -294,16 +294,30 @@
     inset-inline: 50% auto;
     z-index: 2;
     padding: 0.5rem 0.8rem;
-    border: 1px solid rgb(243 238 229 / 0.1);
+    border: 1px solid rgb(243 238 229 / 0.14);
     border-radius: 999px;
-    color: rgb(243 238 229 / 0.72);
-    background: rgb(3 4 7 / 0.3);
+    color: rgb(243 238 229 / 0.82);
+    background: rgb(3 4 7 / 0.48);
     font-size: var(--text-signal);
     font-weight: 650;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     transform: translateX(-50%);
     backdrop-filter: blur(0.85rem);
+    transition:
+      color 420ms var(--ease-calm),
+      border-color 420ms var(--ease-calm),
+      box-shadow 420ms var(--ease-calm);
+  }
+  p.mirror-progress[data-direction="settling"] {
+    color: #d8e1ff;
+    border-color: rgb(167 199 255 / 0.34);
+    box-shadow: 0 0 2rem rgb(118 139 255 / 0.12);
+  }
+  p.mirror-progress[data-direction="rising"] {
+    color: #ffd1b0;
+    border-color: rgb(255 126 81 / 0.32);
+    box-shadow: 0 0 2rem rgb(255 82 54 / 0.1);
   }
   .session-guidance .signal-label {
     color: var(--color-ember-bright);
