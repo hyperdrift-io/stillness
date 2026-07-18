@@ -21,7 +21,7 @@ export type SessionPreferences = {
 
 export const defaultSessionPreferences: SessionPreferences = Object.freeze({
   mode: 'pure',
-  sound: true,
+  sound: false,
   liveSignals: false,
   camera: true,
   visualControl: 'auto',
