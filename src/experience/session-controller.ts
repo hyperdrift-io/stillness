@@ -6,7 +6,7 @@ import {
   type StateEstimate,
 } from './model.ts';
 import { phaseForElapsed } from './phase-policy.ts';
-import { targetResonance, type ResonanceState } from '../resonance/resonance.ts';
+import { legacyTargetResonance, type ResonanceState } from '../resonance/resonance.ts';
 import { FeatureWindow } from '../sensing/feature-window.ts';
 import { initialMirrorSignal, type MirrorSignal } from '../sensing/mirror-signal.ts';
 import type { MotionObservation } from '../sensing/motion-sensor.ts';
@@ -277,7 +277,7 @@ export class SessionController {
       trend: interpolate(scripted.trend, calibrated.trend, adaptation),
       confidence: 1,
     };
-    const resonance = targetResonance(state, this.phase);
+    const resonance = legacyTargetResonance(state, this.phase);
     const relief = {
       ...calibrated,
       motion: measured.motion,

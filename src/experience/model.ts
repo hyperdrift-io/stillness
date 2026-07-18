@@ -29,6 +29,10 @@ export type ReliefState = StateEstimate & {
   readiness: number;
 };
 
+/**
+ * Legacy renderer hand-off retained only until the Task 8 controller cutover.
+ * New adaptive code must use AdaptiveState and AdaptiveVisualControlFrame.
+ */
 export type SessionRenderFrame = {
   resonance: ResonanceState;
   relief: ReliefState;
