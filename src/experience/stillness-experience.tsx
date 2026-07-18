@@ -18,11 +18,12 @@ import {
   commandForKey,
   defaultSessionPreferences,
   type SessionPreferences,
+  type SessionTuning,
 } from './session-preferences.ts';
 
 type ExperienceMode = 'ready' | 'starting' | 'calibrating' | 'active' | 'error';
 
-const cameraUnavailableMessage = 'Pure is open. Mirror needs camera permission and can be enabled from ?.';
+const cameraUnavailableMessage = 'Camera sensing is unavailable. The reset can continue with available signals.';
 const CALIBRATION_DISPLAY_MS = 1_600;
 
 const initialTelemetry: SessionTelemetry = {
@@ -84,13 +85,9 @@ export function StillnessExperience() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [audioAvailable, setAudioAvailable] = useState(true);
 
-  const fallBackToPure = useCallback((token: SessionToken | null = controllerTokenRef.current) => {
+  const disableUnavailableCamera = useCallback((token: SessionToken | null = controllerTokenRef.current) => {
     if (token !== null && !transitionsRef.current.owns(token)) return;
-    setPreferences((current) => ({
-      ...current,
-      mode: 'pure',
-      camera: false,
-    }));
+    setPreferences((current) => ({ ...current, camera: false }));
     setMessage(cameraUnavailableMessage);
   }, []);
 
@@ -117,23 +114,19 @@ export function StillnessExperience() {
   }, []);
 
   const togglePreference = useCallback((
-    preference: keyof SessionPreferences,
+    preference: 'mode' | 'sound' | 'liveSignals' | 'camera',
     enabled: boolean | SessionPreferences['mode'],
   ) => {
     if (preference === 'mode') {
-      const nextMode = enabled === 'mirror' ? 'mirror' : 'pure';
-      setPreferences((current) => ({
-        ...current,
-        mode: nextMode,
-        camera: nextMode === 'mirror',
-      }));
+      const nextMode = enabled === 'guided' ? 'guided' : 'pure';
+      setPreferences((current) => ({ ...current, mode: nextMode }));
       trackEvent('session_preference_changed', { preference, enabled: nextMode });
-      if (nextMode === 'pure') void controllerRef.current?.setCameraEnabled(false);
-      if (nextMode === 'mirror') {
-        const token = controllerTokenRef.current;
-        void controllerRef.current?.setCameraEnabled(true).then((available) => {
-          if (!available) fallBackToPure(token);
-        });
+      if (nextMode === 'guided') {
+        guidancePolicyRef.current.reset();
+        const elapsedMs = controllerRef.current?.snapshot().elapsedMs ?? 0;
+        setCue(guidancePolicyRef.current.evaluate(telemetry, elapsedMs));
+      } else {
+        setCue(null);
       }
       return;
     }
@@ -142,7 +135,6 @@ export function StillnessExperience() {
     setPreferences((current) => ({
       ...current,
       [preference]: nextEnabled,
-      ...(preference === 'camera' ? { mode: nextEnabled ? 'mirror' : 'pure' } : {}),
     }));
     trackEvent('session_preference_changed', { preference, enabled: nextEnabled });
 
@@ -157,18 +149,27 @@ export function StillnessExperience() {
     } else if (preference === 'camera') {
       const token = controllerTokenRef.current;
       void controllerRef.current?.setCameraEnabled(nextEnabled).then((available) => {
-        if (nextEnabled && !available) fallBackToPure(token);
+        if (nextEnabled && !available) disableUnavailableCamera(token);
       });
-    } else if (preference === 'guidance') {
-      if (nextEnabled) {
-        guidancePolicyRef.current.reset();
-        const elapsedMs = controllerRef.current?.snapshot().elapsedMs ?? 0;
-        setCue(guidancePolicyRef.current.evaluate(telemetry, elapsedMs));
-      } else {
-        setCue(null);
-      }
     }
-  }, [fallBackToPure, telemetry]);
+  }, [disableUnavailableCamera, telemetry]);
+
+  const changeTuning = useCallback(function changeTuning<Key extends keyof SessionTuning>(
+    key: Key,
+    value: SessionTuning[Key],
+  ) {
+    setPreferences((current) => ({
+      ...current,
+      tuning: { ...current.tuning, [key]: value },
+    }));
+  }, []);
+
+  const nextVariation = useCallback(() => {
+    setPreferences((current) => ({
+      ...current,
+      variationSeed: current.variationSeed + 1,
+    }));
+  }, []);
 
   useEffect(() => {
     const localDevelopment = window.location.hostname === 'localhost'
@@ -227,7 +228,7 @@ export function StillnessExperience() {
           togglePreference('sound', !preferences.sound);
           break;
         case 'guidance':
-          togglePreference('guidance', !preferences.guidance);
+          togglePreference('mode', preferences.mode === 'guided' ? 'pure' : 'guided');
           break;
         case 'signals':
           if (!menuOpen) {
@@ -291,22 +292,26 @@ export function StillnessExperience() {
       controllerRef.current = controller;
       controllerTokenRef.current = token;
 
-      if (!preferences.camera || preferences.mode === 'pure') void controller.setCameraEnabled(false);
+      if (!preferences.camera) void controller.setCameraEnabled(false);
       const startResult = await controller.start();
       if (!transitionsRef.current.owns(token)) {
         await controller.stop();
         return;
       }
-      const requestedCamera = preferences.camera && preferences.mode === 'mirror';
+      const requestedCamera = preferences.camera;
       const startedPreferences = requestedCamera && !startResult.cameraStarted
-        ? { ...preferences, mode: 'pure' as const, camera: false }
+        ? { ...preferences, camera: false }
         : preferences;
-      if (requestedCamera && !startResult.cameraStarted) fallBackToPure(token);
+      if (requestedCamera && !startResult.cameraStarted) disableUnavailableCamera(token);
       const available = await controller.setSoundEnabled(preferences.sound);
       setMode('calibrating');
-      setMessage(startedPreferences.camera
-        ? 'Calibrating the mirror. Let your face settle into the field.'
-        : 'Camera was not available. Opening the pure reset.');
+      setMessage(
+        startedPreferences.camera
+          ? 'Calibrating the mirror. Let your face settle into the field.'
+          : requestedCamera
+            ? cameraUnavailableMessage
+            : 'Opening the reset with available signals.',
+      );
       globalThis.setTimeout(() => {
         if (!transitionsRef.current.owns(token)) return;
         transitionsRef.current.activate(token, () => {
@@ -315,7 +320,7 @@ export function StillnessExperience() {
           setMessage('');
           trackEvent('session_started', {
             mode: startedPreferences.mode,
-            guidance: preferences.guidance,
+            guidance: startedPreferences.mode === 'guided',
             sound: preferences.sound,
             camera: startedPreferences.camera,
           });
@@ -368,11 +373,11 @@ export function StillnessExperience() {
             <label className="guided-toggle">
               <input
                 type="checkbox"
-                checked={preferences.guidance}
+                checked={preferences.mode === 'guided'}
                 disabled={mode !== 'ready'}
                 onChange={(event) => setPreferences((current) => ({
                   ...current,
-                  guidance: event.currentTarget.checked,
+                  mode: event.currentTarget.checked ? 'guided' : 'pure',
                 }))}
               />
               <span>Guided mode</span>
@@ -385,16 +390,18 @@ export function StillnessExperience() {
 
       {mode === 'active' ? (
         <>
-          {preferences.mode === 'mirror' ? (
-            <p
-              className="mirror-progress"
-              data-direction={telemetry.direction}
-              aria-live="polite"
-            >
-              {mirrorProgressLabel(telemetry)}
-            </p>
+          {preferences.mode === 'guided' ? (
+            <>
+              <p
+                className="mirror-progress"
+                data-direction={telemetry.direction}
+                aria-live="polite"
+              >
+                {mirrorProgressLabel(telemetry)}
+              </p>
+              <SessionGuidance cue={cue} visible />
+            </>
           ) : null}
-          <SessionGuidance cue={cue} visible={preferences.guidance} />
           <button
             ref={menuTriggerRef}
             className="session-menu-trigger"
@@ -411,6 +418,8 @@ export function StillnessExperience() {
             open={menuOpen}
             triggerRef={menuTriggerRef}
             onToggle={togglePreference}
+            onTuningChange={changeTuning}
+            onNextVariation={nextVariation}
             onClose={() => setMenuOpen(false)}
             onLeave={() => void leave()}
           />

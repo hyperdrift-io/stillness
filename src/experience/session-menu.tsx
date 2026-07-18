@@ -2,11 +2,11 @@ import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 
 import type { SessionTelemetry } from './session-controller.ts';
-import type { SessionPreferences } from './session-preferences.ts';
+import type { SessionPreferences, SessionTuning } from './session-preferences.ts';
 
 type TelemetryDirection = SessionTelemetry['direction'];
 type TelemetrySource = SessionTelemetry['source'];
-type Preference = keyof SessionPreferences;
+type Preference = 'mode' | 'sound' | 'liveSignals' | 'camera';
 type PreferenceValue = boolean | SessionPreferences['mode'];
 type DialogLifecycle = Pick<HTMLDialogElement, 'close' | 'open'>;
 type FocusTarget = Pick<HTMLElement, 'focus'>;
@@ -18,6 +18,8 @@ type SessionMenuProps = {
   open: boolean;
   triggerRef: RefObject<HTMLElement | null>;
   onToggle: (preference: Preference, enabled: PreferenceValue) => void;
+  onTuningChange: <Key extends keyof SessionTuning>(key: Key, value: SessionTuning[Key]) => void;
+  onNextVariation: () => void;
   onClose: () => void;
   onLeave: () => void;
 };
@@ -138,30 +140,12 @@ export function SessionMenu({
         <legend>Experience</legend>
         <label>
           <input
-            type="radio"
-            name="active-session-mode"
-            checked={preferences.mode === 'mirror'}
-            onChange={() => onToggle('mode', 'mirror')}
-          />
-          <span>Mirror</span>
-        </label>
-        <label>
-          <input
-            type="radio"
-            name="active-session-mode"
-            checked={preferences.mode === 'pure'}
-            onChange={() => onToggle('mode', 'pure')}
-          />
-          <span>Pure</span>
-        </label>
-        <label>
-          <input
             type="checkbox"
             role="switch"
-            checked={preferences.guidance}
-            onChange={(event) => onToggle('guidance', event.currentTarget.checked)}
+            checked={preferences.mode === 'guided'}
+            onChange={(event) => onToggle('mode', event.currentTarget.checked ? 'guided' : 'pure')}
           />
-          <span>Guidance</span>
+          <span>Guided mode</span>
           <kbd aria-label="Keyboard shortcut G">G</kbd>
         </label>
         <label>
