@@ -460,6 +460,16 @@ export class AdaptiveStateEngine {
       sample.breathConfidence,
       previous.breathConfidence,
     );
+    const pairConfidence = combineConfidence([
+      { value: 0, confidence: movementPairConfidence },
+      { value: 0, confidence: facialPairConfidence },
+      { value: 0, confidence: breathPairConfidence },
+    ]);
+    if (pairConfidence <= WEIGHT_EPSILON) {
+      this.resetTemporalEvidence(sample);
+      return 0;
+    }
+
     const facialDelta = (
       Math.abs(sample.facialTension - previous.facialTension)
       + Math.abs(sample.expressiveActivation - previous.expressiveActivation)
@@ -478,17 +488,14 @@ export class AdaptiveStateEngine {
         confidence: breathPairConfidence,
       },
     ];
-    const pairConfidence = combineConfidence(deltaChannels);
     const observedDelta = weightedValue(deltaChannels, 0);
     const instantaneousCoherence = clamp01(1 - observedDelta * 2);
     const alpha = 1 - Math.exp(-(elapsedMs / 1_000) / TEMPORAL_EMA_SECONDS);
     this.temporalCoherence += (instantaneousCoherence - this.temporalCoherence) * alpha;
-    if (pairConfidence > 0) {
-      this.temporalEvidenceMs = Math.min(
-        TEMPORAL_CONFIDENCE_MS,
-        this.temporalEvidenceMs + elapsedMs * pairConfidence,
-      );
-    }
+    this.temporalEvidenceMs = Math.min(
+      TEMPORAL_CONFIDENCE_MS,
+      this.temporalEvidenceMs + elapsedMs * pairConfidence,
+    );
     this.previousTemporalSample = sample;
     return this.temporalConfidence(sample);
   }
