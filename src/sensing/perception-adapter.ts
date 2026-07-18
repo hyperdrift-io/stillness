@@ -3,7 +3,10 @@ import {
   type PerceptionSnapshot,
 } from './perception-signal.ts';
 import type { PerceptionModulationFrame } from './perception-worker-protocol.ts';
-import { PerceptionWorkerClient } from './perception-worker-client.ts';
+import {
+  PerceptionFrameSupersededError,
+  PerceptionWorkerClient,
+} from './perception-worker-client.ts';
 
 const INITIAL_ANALYSIS_INTERVAL_MS = 66;
 const MIN_ANALYSIS_INTERVAL_MS = 42;
@@ -28,6 +31,8 @@ function cloneSnapshot(snapshot: PerceptionSnapshot): PerceptionSnapshot {
 export class PerceptionAdapter {
   private stream: MediaStream | null = null;
   private video: HTMLVideoElement | null = null;
+  private pendingStream: MediaStream | null = null;
+  private pendingVideo: HTMLVideoElement | null = null;
   private workerClient: PerceptionWorkerClient | null = null;
   private starting: Promise<boolean> | null = null;
   private latest = cloneSnapshot(initialPerceptionSnapshot);
@@ -42,14 +47,16 @@ export class PerceptionAdapter {
   private visibilityListening = false;
 
   start(): Promise<boolean> {
-    if (this.stream && this.workerClient) return Promise.resolve(true);
     if (this.starting) return this.starting;
+    if (this.stream && this.workerClient?.isLive()) return Promise.resolve(true);
+    if (this.stream || this.video || this.workerClient) this.stop();
 
-    const starting = this.startInternal();
-    this.starting = starting;
-    return starting.finally(() => {
+    let starting: Promise<boolean>;
+    starting = this.startInternal().finally(() => {
       if (this.starting === starting) this.starting = null;
     });
+    this.starting = starting;
+    return starting;
   }
 
   read(): PerceptionSnapshot {
@@ -64,6 +71,7 @@ export class PerceptionAdapter {
 
   stop(): void {
     this.generation += 1;
+    this.starting = null;
     this.cancelScheduledFrame();
     if (this.visibilityListening) {
       document.removeEventListener('visibilitychange', this.handleVisibilityChange);
@@ -74,6 +82,11 @@ export class PerceptionAdapter {
     this.workerClient = null;
     this.latestModulation?.bitmap.close();
     this.latestModulation = null;
+    const pendingStream = this.pendingStream;
+    const pendingVideo = this.pendingVideo;
+    this.pendingStream = null;
+    this.pendingVideo = null;
+    this.clearMedia(pendingStream, pendingVideo);
     this.clearMedia(this.stream, this.video);
     this.stream = null;
     this.video = null;
@@ -89,10 +102,12 @@ export class PerceptionAdapter {
 
     const generation = this.generation + 1;
     this.generation = generation;
-    const workerClient = new PerceptionWorkerClient();
+    const workerClient = new PerceptionWorkerClient(() => {
+      if (this.generation === generation && this.workerClient === workerClient) this.stop();
+    });
     this.workerClient = workerClient;
-    let pendingStream: MediaStream | null = null;
-    let pendingVideo: HTMLVideoElement | null = null;
+    let startupStream: MediaStream | null = null;
+    let startupVideo: HTMLVideoElement | null = null;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -104,30 +119,45 @@ export class PerceptionAdapter {
           frameRate: { ideal: 24, max: 30 },
         },
       });
-      pendingStream = stream;
+      startupStream = stream;
       if (this.generation !== generation || this.workerClient !== workerClient) {
-        this.clearMedia(pendingStream, pendingVideo);
+        this.releaseStartupMedia(startupStream, startupVideo);
         return false;
       }
+      this.pendingStream = stream;
 
       const video = document.createElement('video');
       video.muted = true;
       video.playsInline = true;
       video.srcObject = stream;
-      pendingVideo = video;
+      startupVideo = video;
+      this.pendingVideo = video;
       await video.play();
-      if (this.generation !== generation || this.workerClient !== workerClient) {
-        this.clearMedia(pendingStream, pendingVideo);
+      if (
+        this.generation !== generation ||
+        this.workerClient !== workerClient ||
+        this.pendingStream !== stream ||
+        this.pendingVideo !== video
+      ) {
+        this.releaseStartupMedia(startupStream, startupVideo);
         return false;
       }
 
       await workerClient.start();
-      if (this.generation !== generation || this.workerClient !== workerClient) {
-        this.clearMedia(pendingStream, pendingVideo);
+      if (
+        this.generation !== generation ||
+        this.workerClient !== workerClient ||
+        !workerClient.isLive() ||
+        this.pendingStream !== stream ||
+        this.pendingVideo !== video
+      ) {
+        this.releaseStartupMedia(startupStream, startupVideo);
         workerClient.dispose();
         return false;
       }
 
+      this.pendingStream = null;
+      this.pendingVideo = null;
       this.stream = stream;
       this.video = video;
       this.lastCaptureTime = 0;
@@ -136,7 +166,7 @@ export class PerceptionAdapter {
       if (!document.hidden) this.scheduleFrame(generation);
       return true;
     } catch {
-      this.clearMedia(pendingStream, pendingVideo);
+      this.releaseStartupMedia(startupStream, startupVideo);
       if (this.generation === generation && this.workerClient === workerClient) this.stop();
       else workerClient.dispose();
       return false;
@@ -149,6 +179,15 @@ export class PerceptionAdapter {
       video.pause();
       video.srcObject = null;
     }
+  }
+
+  private releaseStartupMedia(
+    stream: MediaStream | null,
+    video: HTMLVideoElement | null,
+  ): void {
+    if (this.pendingStream === stream) this.pendingStream = null;
+    if (this.pendingVideo === video) this.pendingVideo = null;
+    this.clearMedia(stream, video);
   }
 
   private scheduleFrame(generation: number): void {
@@ -215,8 +254,9 @@ export class PerceptionAdapter {
               bitmap: modulation,
             };
           })
-          .catch(() => {
-            // Superseded frames and lifecycle rejection are expected under backpressure.
+          .catch((error: unknown) => {
+            if (error instanceof PerceptionFrameSupersededError) return;
+            if (this.generation === generation && this.workerClient === workerClient) this.stop();
           });
       })
       .catch(() => {

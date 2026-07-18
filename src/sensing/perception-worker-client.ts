@@ -9,6 +9,14 @@ export type PerceptionAnalysis = {
   modulation: ImageBitmap;
 };
 
+export class PerceptionFrameSupersededError extends Error {
+  override readonly name = 'PerceptionFrameSupersededError';
+}
+
+export class PerceptionWorkerFatalError extends Error {
+  override readonly name = 'PerceptionWorkerFatalError';
+}
+
 type AnalysisRequest = {
   requestId: number;
   timestampMs: number;
@@ -26,9 +34,16 @@ export class PerceptionWorkerClient {
   private queued: AnalysisRequest | null = null;
   private nextRequestId = 1;
   private disposed = false;
+  private ready = false;
+
+  constructor(
+    private readonly onFatal?: (error: PerceptionWorkerFatalError) => void,
+  ) {}
 
   start(): Promise<void> {
-    if (this.disposed) return Promise.reject(new Error('Relief perception worker client is disposed.'));
+    if (this.disposed) {
+      return Promise.reject(new PerceptionWorkerFatalError('Relief perception worker client is disposed.'));
+    }
     if (this.startPromise) return this.startPromise;
 
     const worker = new Worker(new URL('./perception-worker.ts', import.meta.url), {
@@ -46,15 +61,19 @@ export class PerceptionWorkerClient {
     try {
       worker.postMessage({ type: 'initialize' } satisfies PerceptionWorkerRequest);
     } catch (error) {
-      this.fail(error instanceof Error ? error : new Error(String(error)));
+      this.fail(this.toFatalError(error));
     }
     return this.startPromise;
   }
 
+  isLive(): boolean {
+    return this.ready && !this.disposed && this.worker !== null;
+  }
+
   analyse(frame: ImageBitmap, timestampMs: number): Promise<PerceptionAnalysis> {
-    if (this.disposed || !this.worker || !this.startPromise) {
+    if (!this.isLive()) {
       frame.close();
-      return Promise.reject(new Error('Relief perception worker client is not running.'));
+      return Promise.reject(new PerceptionWorkerFatalError('Relief perception worker client is not running.'));
     }
 
     return new Promise<PerceptionAnalysis>((resolve, reject) => {
@@ -68,7 +87,11 @@ export class PerceptionWorkerClient {
       this.nextRequestId += 1;
 
       if (this.active) {
-        this.rejectQueued(new Error('Relief perception frame was superseded by a newer frame.'));
+        this.rejectQueued(
+          new PerceptionFrameSupersededError(
+            'Relief perception frame was superseded by a newer frame.',
+          ),
+        );
         this.queued = request;
         return;
       }
@@ -80,7 +103,8 @@ export class PerceptionWorkerClient {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    const error = new Error('Relief perception worker client was disposed.');
+    this.ready = false;
+    const error = new PerceptionWorkerFatalError('Relief perception worker client was disposed.');
     this.rejectStart?.(error);
     this.rejectStart = null;
     this.resolveStart = null;
@@ -104,9 +128,9 @@ export class PerceptionWorkerClient {
 
   private dispatch(request: AnalysisRequest): void {
     const worker = this.worker;
-    if (!worker || this.disposed) {
+    if (!worker || !this.isLive()) {
       request.frame.close();
-      request.reject(new Error('Relief perception worker client is not running.'));
+      request.reject(new PerceptionWorkerFatalError('Relief perception worker client is not running.'));
       return;
     }
 
@@ -123,9 +147,7 @@ export class PerceptionWorkerClient {
       );
     } catch (error) {
       request.frame.close();
-      this.active = null;
-      request.reject(error instanceof Error ? error : new Error(String(error)));
-      this.dispatchQueued();
+      this.fail(this.toFatalError(error));
     }
   }
 
@@ -143,7 +165,9 @@ export class PerceptionWorkerClient {
     queued.reject(error);
   }
 
-  private fail(error: Error): void {
+  private fail(error: PerceptionWorkerFatalError): void {
+    if (this.disposed) return;
+    this.ready = false;
     this.rejectStart?.(error);
     this.rejectStart = null;
     this.resolveStart = null;
@@ -153,11 +177,19 @@ export class PerceptionWorkerClient {
     this.worker?.terminate();
     this.worker = null;
     this.disposed = true;
+    this.onFatal?.(error);
+  }
+
+  private toFatalError(error: unknown): PerceptionWorkerFatalError {
+    if (error instanceof PerceptionWorkerFatalError) return error;
+    const message = error instanceof Error ? error.message : String(error);
+    return new PerceptionWorkerFatalError(message);
   }
 
   private handleMessage = (event: MessageEvent<PerceptionWorkerResult>): void => {
     const message = event.data;
     if (message.type === 'ready') {
+      this.ready = true;
       this.resolveStart?.();
       this.resolveStart = null;
       this.rejectStart = null;
@@ -165,7 +197,7 @@ export class PerceptionWorkerClient {
     }
 
     if (message.type === 'error') {
-      this.fail(new Error(message.message));
+      this.fail(new PerceptionWorkerFatalError(message.message));
       return;
     }
 
@@ -182,10 +214,10 @@ export class PerceptionWorkerClient {
 
   private handleWorkerError = (event: ErrorEvent): void => {
     event.preventDefault();
-    this.fail(new Error(event.message || 'Relief perception worker failed.'));
+    this.fail(new PerceptionWorkerFatalError(event.message || 'Relief perception worker failed.'));
   };
 
   private handleMessageError = (): void => {
-    this.fail(new Error('Relief perception worker returned an unreadable message.'));
+    this.fail(new PerceptionWorkerFatalError('Relief perception worker returned an unreadable message.'));
   };
 }
