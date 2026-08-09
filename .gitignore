@@ -5,6 +5,7 @@ dist
 *.tsbuildinfo
 .cache
 .firecrawl/
+.local-music/
 public/wasm/
 .worktrees/
 .DS_Store

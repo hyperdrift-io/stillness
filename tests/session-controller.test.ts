@@ -54,11 +54,12 @@ function createHarness(observationConfidence = 0, options: HarnessOptions = {}):
     },
     audio: {
       start: async () => { calls.push('audio:start'); },
-      update: () => calls.push('audio:update'),
-      setAudible: async (audible) => {
-        calls.push(`audio:audible:${audible}`);
+      update: () => { calls.push('audio:update'); },
+      setMode: async (mode) => {
+        calls.push(`audio:mode:${mode}`);
         return options.soundEnabledResult ?? true;
       },
+      isMusicAvailable: () => true,
       suspend: async () => { calls.push('audio:suspend'); },
       resume: async () => { calls.push('audio:resume'); },
       dispose: () => calls.push('audio:dispose'),
@@ -169,8 +170,8 @@ test('SessionController suspends, resumes, and disposes every resource', async (
 test('SessionController forwards sound preference and returns audio availability', async () => {
   const { controller, calls } = createHarness(0, { soundEnabledResult: false });
 
-  assert.equal(await controller.setVocalAudible(false), false);
-  assert.ok(calls.includes('audio:audible:false'));
+  assert.equal(await controller.setSoundMode('off'), false);
+  assert.ok(calls.includes('audio:mode:off'));
 });
 
 test('SessionController excludes hidden time and restarts sensing when visible', async () => {

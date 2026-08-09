@@ -182,7 +182,7 @@ test('every cue explains how the field is responding to the signal', () => {
     ],
     [
       { ...mirrorTelemetry, relief: 0.68 },
-      'Sound can carry the reset while the field keeps breathing with you.',
+      'The waves can carry the reset while the field keeps breathing with you.',
       12_000,
     ],
     [

@@ -2,12 +2,16 @@ import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 
 import type { SessionTelemetry } from './session-controller.ts';
-import type { SessionPreferences, SessionTuning } from './session-preferences.ts';
+import type {
+  SessionPreferences,
+  SessionTuning,
+  SoundMode,
+} from './session-preferences.ts';
 
 type TelemetryDirection = SessionTelemetry['direction'];
 type TelemetrySource = SessionTelemetry['source'];
-type Preference = 'mode' | 'vocal' | 'liveSignals' | 'camera' | 'visualControl';
-type PreferenceValue = boolean | SessionPreferences['mode'] | SessionPreferences['visualControl'];
+type Preference = 'mode' | 'soundMode' | 'liveSignals' | 'camera' | 'visualControl';
+type PreferenceValue = boolean | SessionPreferences['mode'] | SessionPreferences['visualControl'] | SoundMode;
 type DialogLifecycle = Pick<HTMLDialogElement, 'close' | 'open'>;
 type FocusTarget = Pick<HTMLElement, 'focus'>;
 
@@ -15,6 +19,7 @@ type SessionMenuProps = {
   preferences: SessionPreferences;
   telemetry: SessionTelemetry;
   audioAvailable: boolean;
+  musicAvailable: boolean;
   cameraAvailable: boolean;
   open: boolean;
   triggerRef: RefObject<HTMLElement | null>;
@@ -93,6 +98,7 @@ export function SessionMenu({
   preferences,
   telemetry,
   audioAvailable,
+  musicAvailable,
   cameraAvailable,
   open,
   triggerRef,
@@ -152,20 +158,6 @@ export function SessionMenu({
           <input
             type="checkbox"
             role="switch"
-            checked={preferences.vocal}
-            disabled={!audioAvailable}
-            aria-describedby={!audioAvailable ? 'vocal-unavailable' : undefined}
-            onChange={(event) => onToggle('vocal', event.currentTarget.checked)}
-          />
-          <span>Vowel voice</span>
-          <kbd aria-label="Keyboard shortcut M">M</kbd>
-        </label>
-        {!audioAvailable ? <small id="vocal-unavailable">Vowel voice is unavailable in this browser.</small> : null}
-        <small>An original vowel voice emerges gradually as the field settles.</small>
-        <label>
-          <input
-            type="checkbox"
-            role="switch"
             checked={preferences.liveSignals}
             onChange={(event) => onToggle('liveSignals', event.currentTarget.checked)}
           />
@@ -205,6 +197,35 @@ export function SessionMenu({
         </label>
       </fieldset>
 
+      <fieldset>
+        <legend>Sound</legend>
+        {([
+          ['off', 'Off'],
+          ['waves', 'Gentle waves'],
+          ['music', 'Local album · shuffled'],
+        ] as const satisfies readonly (readonly [SoundMode, string])[]).map(([mode, label]) => (
+          <label key={mode}>
+            <input
+              type="radio"
+              name="sound-mode"
+              value={mode}
+              checked={preferences.soundMode === mode}
+              disabled={!audioAvailable || (mode === 'music' && !musicAvailable)}
+              aria-describedby={mode === 'music' ? 'music-stream-description' : undefined}
+              onChange={() => onToggle('soundMode', mode)}
+            />
+            <span>{label}</span>
+            {mode === 'waves' ? <kbd aria-label="Keyboard shortcut M">M</kbd> : null}
+          </label>
+        ))}
+        {!audioAvailable ? <small>Sound is unavailable in this browser.</small> : null}
+        <small id="music-stream-description">
+          {musicAvailable
+            ? 'Tracks stream in random order at half speed with a bass lift. Their beat moves the field while colour travels through the spectrum.'
+            : 'The album stream is not configured on this server.'}
+        </small>
+      </fieldset>
+
       {preferences.liveSignals ? (
         <section aria-labelledby="live-signals-title">
           <h3 id="live-signals-title">Live signals</h3>
@@ -241,7 +262,7 @@ export function SessionMenu({
       ) : null}
 
       <p className="privacy-note">
-        Camera and motion signals are processed only in memory on this device, then discarded. Sound is generated here. Nothing is saved or sent.
+        Camera and motion signals stay in memory on this device, then are discarded. Album playback is analysed only in this browser. Nothing is uploaded.
       </p>
       <button type="button" className="text-action" onClick={onLeave}>
         Leave experience

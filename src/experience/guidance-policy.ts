@@ -48,7 +48,7 @@ const CUES: Record<GuidanceCueKey, GuidanceCue> = {
     id: 'restore',
     label: 'Restoration is forming',
     invitation: 'Soften your gaze or close your eyes for a few breaths.',
-    explanation: 'Sound can carry the reset while the field keeps breathing with you.',
+    explanation: 'The waves can carry the reset while the field keeps breathing with you.',
   },
   return: {
     id: 'return',

@@ -45,6 +45,11 @@ export type AdaptiveVisualControlFrame = {
   breathPhase: number;
   breathConfidence: number;
   coherence: number;
+  audioActive?: boolean;
+  audioEnergy?: number;
+  audioBass?: number;
+  audioBeat?: number;
+  audioHue?: number;
   palette: CameraPalette;
   topologySegments: Float32Array;
   colorInfluence: number;

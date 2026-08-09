@@ -28,20 +28,28 @@ const still: ResonanceState = {
   space: 0.98,
 };
 
-test('mapAudioParameters keeps the vowel voice within safe ranges', () => {
+test('mapAudioParameters keeps the wave layer within safe ranges', () => {
   const parameters = mapAudioParameters({ ...active, audioEnergy: 4, pulse: Number.NaN });
-  assert.ok(parameters.delayMix >= 0.08 && parameters.delayMix <= 0.44);
-  assert.ok(parameters.vocalGain >= 0.035 && parameters.vocalGain <= 0.215);
-  assert.ok(parameters.vocalPitchHz >= 73.42 && parameters.vocalPitchHz <= 82.42);
-  assert.ok(parameters.formantsHz.every(Number.isFinite));
+  assert.ok(parameters.waveGain >= 0.045 && parameters.waveGain <= 0.2);
+  assert.ok(parameters.waveCutoffHz >= 420 && parameters.waveCutoffHz <= 1_480);
+  assert.ok(parameters.waveHighpassHz >= 48 && parameters.waveHighpassHz <= 82);
+  assert.ok(parameters.swell >= 0 && parameters.swell <= 1);
 });
 
-test('settling opens the vowel and its delay', () => {
+test('settling softens the generated surf', () => {
   const beginning = mapAudioParameters(active);
   const ending = mapAudioParameters(still);
-  assert.ok(ending.delayMix > beginning.delayMix);
-  assert.ok(ending.vocalGain > beginning.vocalGain);
-  assert.notDeepEqual(ending.formantsHz, beginning.formantsHz);
+  assert.ok(ending.waveGain < beginning.waveGain);
+  assert.ok(ending.waveCutoffHz < beginning.waveCutoffHz);
+  assert.ok(ending.waveHighpassHz < beginning.waveHighpassHz);
+});
+
+test('the generated surf rises and retreats on a slow cycle', () => {
+  const retreat = mapAudioParameters({ ...active, coherence: 0 }, 0);
+  const crest = mapAudioParameters({ ...active, coherence: 0 }, 4.6625);
+  assert.ok(crest.swell > retreat.swell);
+  assert.ok(crest.waveGain > retreat.waveGain);
+  assert.ok(crest.waveCutoffHz > retreat.waveCutoffHz);
 });
 
 test('audible gain target fades to silence without reaching digital zero', () => {

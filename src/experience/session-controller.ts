@@ -1,4 +1,5 @@
 import { targetResonance, type ResonanceState } from '../resonance/resonance.ts';
+import type { AudioVisualSignal } from '../audio/stillness-audio.ts';
 import { BreathEstimator, type BreathSignal } from '../sensing/breath-estimator.ts';
 import {
   CalibrationController,
@@ -34,6 +35,7 @@ import {
 } from './model.ts';
 import {
   defaultSessionPreferences,
+  type SoundMode,
   type SessionTuning,
 } from './session-preferences.ts';
 
@@ -46,9 +48,9 @@ type RendererPort = {
 
 type AudioPort = {
   start: () => Promise<void>;
-  update: (state: ResonanceState, elapsedSeconds: number) => void;
-  setAudible: (audible: boolean) => Promise<boolean>;
-  setVocalEnabled?: (enabled: boolean) => void;
+  update: (state: ResonanceState, elapsedSeconds: number) => AudioVisualSignal | void;
+  setMode: (mode: SoundMode) => Promise<boolean>;
+  isMusicAvailable: () => boolean;
   suspend: () => Promise<void>;
   resume: () => Promise<void>;
   dispose: () => void;
@@ -80,6 +82,7 @@ type BaselinePort = {
 const CALIBRATION_WAIT_TIMEOUT_MS = 12_500;
 const TELEMETRY_INTERVAL_MS = 120;
 const MAX_LEGACY_TOPOLOGY_SEGMENTS = 4_096;
+const CHROMATIC_CYCLE_MS = 10_000;
 
 const initialCalibration: CalibrationStatus = {
   phase: 'framing',
@@ -437,6 +440,18 @@ export class SessionController {
       this.tuning,
       defaultSessionPreferences.variationSeed,
     );
+    // Colour is part of the visual journey, so it must keep moving even when
+    // streamed audio is unavailable. Beat response remains audio-dependent.
+    adaptiveFrame.audioHue = (Math.max(0, this.elapsedMs) / CHROMATIC_CYCLE_MS) % 1;
+    const audioVisual = this.audioAvailable
+      ? this.dependencies.audio.update(resonance, this.elapsedMs / 1_000)
+      : undefined;
+    if (audioVisual) {
+      adaptiveFrame.audioActive = audioVisual.active;
+      adaptiveFrame.audioEnergy = clamp01(audioVisual.energy);
+      adaptiveFrame.audioBass = clamp01(audioVisual.bass);
+      adaptiveFrame.audioBeat = clamp01(audioVisual.beat);
+    }
     const mirror = mirrorFromPerception(perception);
     const relief = {
       activation: clamp01(resonance.complexity),
@@ -470,7 +485,6 @@ export class SessionController {
       }
     }
     this.dependencies.renderer.update(frame);
-    if (this.audioAvailable) this.dependencies.audio.update(resonance, this.elapsedMs / 1_000);
 
     if (now - this.lastTelemetryAt >= TELEMETRY_INTERVAL_MS || this.lastTelemetryAt === -Infinity) {
       this.dependencies.onTelemetry?.(this.telemetryFor(
@@ -521,10 +535,6 @@ export class SessionController {
     this.tuning = { ...tuning };
   }
 
-  setVocalEnabled(enabled: boolean): void {
-    this.dependencies.audio.setVocalEnabled?.(enabled);
-  }
-
   setCameraEnabled(enabled: boolean): Promise<boolean> {
     const cameraOperation = ++this.cameraOperation;
     this.cameraEnabled = enabled;
@@ -550,9 +560,17 @@ export class SessionController {
     return Promise.resolve(true);
   }
 
-  async setVocalAudible(enabled: boolean): Promise<boolean> {
+  async setSoundMode(mode: SoundMode): Promise<boolean> {
     if (!this.audioAvailable) return false;
-    return this.dependencies.audio.setAudible(enabled).catch(() => false);
+    return this.dependencies.audio.setMode(mode).catch(() => false);
+  }
+
+  isMusicAvailable(): boolean {
+    return this.audioAvailable && this.dependencies.audio.isMusicAvailable();
+  }
+
+  isAudioAvailable(): boolean {
+    return this.audioAvailable;
   }
 
   async setHidden(hidden: boolean): Promise<void> {

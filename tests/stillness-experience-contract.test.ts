@@ -31,7 +31,7 @@ test('active experience renders guidance, menu, and a touch menu trigger', async
   assert.match(source, /aria-label="Adjust session"/);
 });
 
-test('begin wires telemetry and applies camera and vocal preferences in gesture-safe order', async () => {
+test('begin wires telemetry and applies camera and sound preferences in gesture-safe order', async () => {
   const source = await read('src/experience/stillness-experience.tsx');
 
   assert.match(source, /onTelemetry:\s*\(nextTelemetry\) =>/);
@@ -39,8 +39,9 @@ test('begin wires telemetry and applies camera and vocal preferences in gesture-
   assert.match(source, /guidancePolicyRef\.current\.evaluate\(/);
   assert.match(
     source,
-    /if \(!preferences\.camera\)[\s\S]*controller\.setCameraEnabled\(false\)[\s\S]*await controller\.start\(\)[\s\S]*controller\.setVocalAudible\(preferences\.vocal\)/,
+    /audioRef\.current \?\? new StillnessAudio\(preferences\.soundMode\)[\s\S]*if \(!preferences\.camera\)[\s\S]*controller\.setCameraEnabled\(false\)[\s\S]*await controller\.start\(\)[\s\S]*controller\.isAudioAvailable\(\)[\s\S]*controller\.setSoundMode\(preferences\.soundMode\)/,
   );
+  assert.match(source, /audioRef\.current\?\.prime\(\)/);
   assert.doesNotMatch(source, /setCameraEnabled\(true\)[\s\S]*controller\.start\(\)/);
 });
 
@@ -69,7 +70,7 @@ test('shortcuts ignore editable targets and non-shift modifiers while escape clo
 test('live controls update preferences, resources, and guidance visibility', async () => {
   const source = await read('src/experience/stillness-experience.tsx');
 
-  assert.match(source, /controller\?\.setVocalAudible\(nextEnabled\)/);
+  assert.match(source, /controller\.setSoundMode\(soundMode\)/);
   assert.match(source, /transitionsRef\.current\.owns\(token\)[\s\S]*setAudioAvailable\(available\)/);
   assert.match(source, /controllerRef\.current\?\.setCameraEnabled\(enabled\)/);
   assert.match(source, /guidancePolicyRef\.current\.reset\(\)/);
@@ -105,7 +106,6 @@ test('session presentation uses the approved semantic responsive roles without i
   const styles = await read('src/styles.css');
 
   for (const selector of [
-    '.mode-choice',
     '.session-guidance',
     'button.session-menu-trigger',
     'dialog.session-menu',
@@ -115,4 +115,12 @@ test('session presentation uses the approved semantic responsive roles without i
   }
   assert.match(styles, /@media \(max-width: 40rem\)/);
   assert.doesNotMatch(experience, /style=\{/);
+});
+
+test('the active canvas exposes only the compact question-mark menu trigger', async () => {
+  const source = await read('src/experience/stillness-experience.tsx');
+
+  assert.match(source, /aria-label="Adjust session"/);
+  assert.match(source, /<span aria-hidden="true">\?<\/span>/);
+  assert.doesNotMatch(source, />\s*adjust session\s*</i);
 });

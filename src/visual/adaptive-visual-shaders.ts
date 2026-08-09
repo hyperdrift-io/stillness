@@ -47,6 +47,8 @@ uniform float uSceneMix;
 uniform float uVariationSeed;
 uniform float uBreathScale;
 uniform float uReducedMotion;
+uniform float uAudioActive;
+uniform float uAudioBeat;
 
 in vec2 vUv;
 out vec4 outColor;
@@ -129,7 +131,13 @@ void main() {
     signalUp - signalDown
   );
 
-  vec2 centered = (vUv - 0.5) / max(uBreathScale, 0.94);
+  float fallAllowance = mix(1.0, 0.12, clamp(uReducedMotion, 0.0, 1.0));
+  float beatAcceleration = clamp(uAudioActive, 0.0, 1.0)
+    * smoothstep(0.04, 0.5, clamp(uAudioBeat, 0.0, 1.0));
+  float fallScale = 1.0 + (
+    0.00018 + beatAcceleration * 0.00068
+  ) * max(uDeltaScale, 0.0) * fallAllowance;
+  vec2 centered = (vUv - 0.5) / max(uBreathScale * fallScale, 0.94);
   float aspect = uResolution.x / max(uResolution.y, 1.0);
   vec2 aspectPoint = vec2(centered.x * aspect, centered.y);
   float motionAllowance = mix(1.0, 0.24, clamp(uReducedMotion, 0.0, 1.0));
@@ -446,6 +454,8 @@ uniform float uBrowLift;
 uniform float uEyeClosure;
 uniform float uBreathScale;
 uniform float uReducedMotion;
+uniform float uAudioActive;
+uniform float uAudioBeat;
 
 out float vAcross;
 out float vAlong;
@@ -490,12 +500,18 @@ void main() {
   float browLift = clamp(uBrowLift, 0.0, 1.0);
   float eyeClosure = clamp(uEyeClosure, 0.0, 1.0);
   float motionAllowance = mix(1.0, 0.18, clamp(uReducedMotion, 0.0, 1.0));
+  float beatPulse = smoothstep(0.04, 0.5, clamp(uAudioBeat, 0.0, 1.0));
+  float audioMotion = clamp(uAudioActive, 0.0, 1.0) * beatPulse * motionAllowance;
   float instancePhase = float(gl_InstanceID) * 0.754877666;
   float along = corner.x;
   float curve = sin(along * 3.141592653589793) * sin(instancePhase + uTime * 0.8)
     * tension * 0.006;
   float highFrequency = sin(along * mix(8.0, 22.0, tension) + instancePhase * 3.1 + uTime * 2.2)
     * tension * tension * 0.0018;
+  curve += sin(along * 6.283185307179586 + instancePhase * 1.7 + uTime * 3.4)
+    * audioMotion * 0.009;
+  highFrequency += sin(along * 18.0 - instancePhase * 2.3 + uTime * 5.2)
+    * audioMotion * 0.0032;
   vec2 mirroredCenter = vec2(1.0 - uFaceCenter.x, 1.0 - uFaceCenter.y);
   vec2 source = mix(
     vec2(1.0 - aStart.x, 1.0 - aStart.y),
@@ -531,8 +547,10 @@ void main() {
 
   float depth = mix(aStart.z, aEnd.z, along);
   float depthPresence = 1.0 / (1.0 + abs(depth) * 7.0);
-  float widthPixels = mix(1.2, 3.0, max(warmth, expressionResponse))
-    * mix(0.78, 1.0, depthPresence);
+  float widthPixels = (
+    mix(1.2, 3.0, max(warmth, expressionResponse))
+      + clamp(uAudioActive, 0.0, 1.0) * beatPulse * 3.2 * motionAllowance
+  ) * mix(0.78, 1.0, depthPresence);
   vec2 position = center + normal * corner.y * widthPixels / max(uResolution, vec2(1.0));
   vAcross = corner.y;
   vAlong = along;
@@ -557,6 +575,9 @@ uniform float uDeltaScale;
 uniform vec3 uPaletteLight;
 uniform float uPaletteConfidence;
 uniform float uColorInfluence;
+uniform float uAudioActive;
+uniform float uAudioBeat;
+uniform float uReducedMotion;
 
 in float vAcross;
 in float vAlong;
@@ -589,10 +610,14 @@ void main() {
   vec3 color = mix(authored, uPaletteLight, paletteAmount);
   float frequencySpark = mix(0.92, 1.22, tension);
   float connectedLine = edge * mix(0.72, 1.0, cap);
+  float beatBloom = clamp(uAudioActive, 0.0, 1.0)
+    * smoothstep(0.04, 0.5, clamp(uAudioBeat, 0.0, 1.0))
+    * mix(1.0, 0.35, clamp(uReducedMotion, 0.0, 1.0));
   float intensity = connectedLine * vDepth * frequencySpark * vPresence
     * clamp(uVisualIntensity, 0.75, 1.25)
     * clamp(uDeltaScale, 0.0, 2.0)
-    * (0.12 + vExpression * 0.1 + warmth * 0.035);
+    * (0.17 + vExpression * 0.12 + warmth * 0.05)
+    * (1.0 + beatBloom * 1.35);
   outColor = vec4(color * intensity, 1.0);
 }
 `;
@@ -632,6 +657,11 @@ uniform sampler2D uFeedback;
 uniform sampler2D uBloom;
 uniform vec2 uResolution;
 uniform float uVisualIntensity;
+uniform float uAudioActive;
+uniform float uAudioEnergy;
+uniform float uAudioBass;
+uniform float uAudioBeat;
+uniform float uAudioHue;
 
 in vec2 vUv;
 out vec4 outColor;
@@ -645,27 +675,49 @@ vec3 acesApproximation(vec3 color) {
   return clamp((color * (a * color + b)) / (color * (c * color + d) + e), 0.0, 1.0);
 }
 
+vec3 spectrumColor(float hue) {
+  const float TAU = 6.283185307179586;
+  return 0.5 + 0.5 * cos(TAU * (hue + vec3(0.0, 0.6666667, 0.3333333)));
+}
+
 void main() {
-  vec3 feedback = texture(uFeedback, vUv).rgb;
-  vec3 bloom = texture(uBloom, vUv).rgb;
-  vec3 color = feedback + bloom * 0.19;
-  float maximum = max(max(color.r, color.g), color.b);
-  float minimum = min(min(color.r, color.g), color.b);
-  float chroma = maximum - minimum;
-  float restraint = 1.0 - smoothstep(0.72, 1.75, chroma) * 0.16;
+  float beat = clamp(uAudioActive, 0.0, 1.0)
+    * smoothstep(0.04, 0.5, clamp(uAudioBeat, 0.0, 1.0));
+  vec2 displayUv = vec2(0.5) + (vUv - vec2(0.5)) / (1.0 + beat * 0.062);
+  displayUv = clamp(displayUv, vec2(0.001), vec2(0.999));
+  vec3 feedback = texture(uFeedback, displayUv).rgb;
+  vec3 bloom = texture(uBloom, displayUv).rgb;
+  float audioPulse = clamp(uAudioActive, 0.0, 1.0)
+    * (
+      clamp(uAudioEnergy, 0.0, 1.0) * 0.25
+      + clamp(uAudioBass, 0.0, 1.0) * 0.2
+      + clamp(uAudioBeat, 0.0, 1.0) * 0.55
+    );
+  vec3 color = feedback + bloom * (0.06 + beat * 0.075 + audioPulse * 0.016);
+  float sourceLuminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
+  vec3 spectrum = mix(vec3(0.72), spectrumColor(uAudioHue), 0.48);
+  float spectrumLuminance = dot(spectrum, vec3(0.2126, 0.7152, 0.0722));
+  spectrum *= 0.72 / max(spectrumLuminance, 0.12);
+  vec3 cycleTarget = spectrum * (sourceLuminance / 0.72);
+  float spectrumAmount = 0.46 + audioPulse * 0.04;
+  color = mix(color, cycleTarget, spectrumAmount);
+
+  // Preserve local contrast: soften chroma without normalising every bright
+  // pixel to the same luminance, which previously flattened the face into fog.
   float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
-  color = mix(vec3(luminance), color, restraint);
-  color *= 1.0 / max(1.0, luminance / 0.72);
-  color = acesApproximation(color * clamp(uVisualIntensity, 0.75, 1.25));
+  float saturation = mix(0.82, 0.74, clamp(uAudioActive, 0.0, 1.0));
+  color = mix(vec3(luminance), color, saturation);
+  color = max(color - vec3(0.012), vec3(0.0));
+  color = acesApproximation(color * clamp(uVisualIntensity, 0.75, 1.25) * 0.64);
 
   float aspect = uResolution.x / max(uResolution.y, 1.0);
   vec2 point = vec2((vUv.x - 0.5) * aspect, vUv.y - 0.5);
   float vignette = 1.0 - smoothstep(0.44, 0.92, length(point)) * 0.34;
   color *= vignette;
   color = pow(color, vec3(1.0 / 2.2));
-  float displayPeak = max(max(color.r, color.g), color.b);
-  // Presence should feel luminous without turning the display into a light source.
-  color *= 0.62 / max(0.62, displayPeak);
+  // A fixed display exposure keeps the field soft while retaining differences
+  // between darkness, scene emission, and the live topology.
+  color *= 0.44;
   outColor = vec4(color, 1.0);
 }
 `;

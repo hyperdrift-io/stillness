@@ -12,9 +12,9 @@
     --color-void: #061a1f;
     --color-depth: #0a252a;
     --color-text: #d8d5bf;
-    --color-muted: #93a5a1;
+    --color-muted: #a7b7b2;
     --color-ember: #6e552f;
-    --color-ember-bright: #b08a52;
+    --color-ember-bright: #c49b5c;
     --color-focus: #6b999d;
     --color-panel: rgb(6 26 31 / 0.9);
     --color-fine-border: rgb(216 213 191 / 0.16);
@@ -232,66 +232,28 @@
     inset-block-start: 50%;
     inset-inline-start: 50%;
     z-index: 2;
-    display: grid;
-    gap: var(--space-xs);
-    inline-size: min(90vw, 40rem);
-    padding: var(--space-m);
+    inline-size: min(90vw, 48rem);
     text-align: center;
     text-wrap: balance;
     pointer-events: none;
     transform: translate(-50%, -50%);
-    animation: guidance-enter 700ms var(--ease-calm) both;
-  }
-  p.mirror-progress {
-    position: fixed;
-    inset-block-end: max(1rem, env(safe-area-inset-bottom));
-    inset-inline: 50% auto;
-    z-index: 2;
-    padding: 0.5rem 0.8rem;
-    border: 1px solid rgb(243 238 229 / 0.14);
-    border-radius: 999px;
-    color: rgb(243 238 229 / 0.82);
-    background: rgb(3 4 7 / 0.48);
-    font-size: var(--text-signal);
-    font-weight: 650;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    transform: translateX(-50%);
-    backdrop-filter: blur(0.85rem);
-    transition:
-      color 420ms var(--ease-calm),
-      border-color 420ms var(--ease-calm),
-      box-shadow 420ms var(--ease-calm);
-  }
-  p.mirror-progress[data-direction="settling"] {
-    color: #d8e1ff;
-    border-color: rgb(167 199 255 / 0.34);
-    box-shadow: 0 0 2rem rgb(118 139 255 / 0.12);
-  }
-  p.mirror-progress[data-direction="rising"] {
-    color: #ffd1b0;
-    border-color: rgb(255 126 81 / 0.32);
-    box-shadow: 0 0 2rem rgb(255 82 54 / 0.1);
-  }
-  .session-guidance .signal-label {
-    color: var(--color-ember-bright);
-    font-size: var(--text-signal);
-    font-weight: 650;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
   }
   .session-guidance h2 {
+    color: #fff;
     font-family: Georgia, "Times New Roman", serif;
-    font-size: clamp(1.75rem, 5vw, 3.5rem);
+    font-size: clamp(2rem, 6vw, 4.75rem);
     font-weight: 400;
-    line-height: 1.1;
-    text-shadow: 0 0 2rem rgb(3 4 7 / 0.9);
-  }
-  .session-guidance .signal-explanation {
-    color: var(--color-muted);
-    font-size: var(--text-small);
-    line-height: 1.5;
-    text-shadow: 0 0 1rem var(--color-void);
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+    opacity: 0;
+    mix-blend-mode: difference;
+    paint-order: stroke fill;
+    -webkit-text-stroke: 0.012em rgb(255 255 255 / 0.22);
+    text-shadow:
+      0 0 0.08em rgb(255 255 255 / 0.92),
+      0 0 0.8em rgb(0 0 0 / 0.82);
+    transform: scale(0.92);
+    animation: guided-words 9s var(--ease-calm) both;
   }
   button.session-menu-trigger {
     position: fixed;
@@ -300,15 +262,16 @@
     z-index: 3;
     display: inline-flex;
     align-items: center;
-    gap: 0.55rem;
+    justify-content: center;
+    inline-size: 2.75rem;
     min-block-size: 2.75rem;
-    padding: 0.45rem 0.75rem;
+    padding: 0;
     border: 1px solid var(--color-fine-border);
     border-radius: 999px;
-    color: rgb(243 238 229 / 0.62);
-    background: rgb(3 4 7 / 0.38);
-    font-size: var(--text-signal);
-    letter-spacing: 0.04em;
+    color: rgb(243 238 229 / 0.84);
+    background: rgb(3 4 7 / 0.62);
+    font-size: 1rem;
+    font-weight: 650;
     backdrop-filter: blur(0.75rem);
     transition: color 240ms var(--ease-calm), background 240ms var(--ease-calm);
   }
@@ -369,6 +332,10 @@
     gap: var(--space-s);
     min-block-size: 2.75rem;
     cursor: pointer;
+  }
+  dialog.session-menu label:has(input:disabled) {
+    cursor: not-allowed;
+    opacity: 0.58;
   }
   dialog.session-menu button.menu-action {
     display: grid;
@@ -462,9 +429,11 @@
 }
 
 @layer states {
-  @keyframes guidance-enter {
-    from { opacity: 0; transform: translate(-50%, -46%); }
-    to { opacity: 1; transform: translate(-50%, -50%); }
+  @keyframes guided-words {
+    0% { opacity: 0; transform: scale(0.92); }
+    18% { opacity: 1; transform: scale(1); }
+    68% { opacity: 0.96; transform: scale(1.07); }
+    100% { opacity: 0; transform: scale(1.16); }
   }
   .experience[data-mode="ready"] .light-field { opacity: 0.78; }
   .experience[data-mode="active"] .light-field { opacity: 1; }
@@ -493,6 +462,11 @@
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
+    }
+    .session-guidance h2 {
+      opacity: 1;
+      transform: none;
+      animation: none;
     }
   }
 }

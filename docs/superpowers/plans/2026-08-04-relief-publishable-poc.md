@@ -18,7 +18,7 @@ The eye enters a near-black blue-green field and lands on one living facial cons
 3. Drive audio and live telemetry from the same adaptive state without exposing a composite score or diagnostic label.
 4. Keep camera denial complete and non-punitive; unavailable evidence redistributes weight instead of advancing progress.
 5. Reduce the concentrated white core and bloom while preserving the approved red-to-amber-to-violet-to-teal-to-pearl journey.
-6. Keep Pure as the default, Guided optional, sound off, controls behind `?`, and visual variation independent from progress.
+6. Keep Pure as the default, Guided optional, album playback beginning with the experience, controls behind `?`, and visual variation independent from progress.
 
 ## Explicitly deferred
 
@@ -39,7 +39,7 @@ The eye enters a near-black blue-green field and lands on one living facial cons
 - Keep camera intent owned by the newest asynchronous request so an older failure cannot untick a newer successful choice.
 - Default the private live-signal panel to on and surface genuine runtime camera loss without treating missing evidence as user failure.
 - Make Radiance clear feedback history faster and cap display output so arrival remains a structured teal-and-pearl presence rather than accumulating toward white.
-- Add an optional, original formant-vocal drone that emerges near stillness. It uses local Web Audio vowel synthesis and delay; it does not bundle Delay Lama, its samples, code, name, or artwork.
+- Start the shuffled album stream when the user begins the experience, with a silent fallback when the server stream or browser audio is unavailable. Playback uses half speed and a restrained bass lift. Stream through HTTP Range requests from `STILLNESS_MUSIC_DIR`; browser analysis lets bass onsets pulse the persistent field while colour moves through one continuous chromatic cycle. Recordings remain gitignored and outside the application build; production streaming requires separately provisioned, licensed files.
 - Keep media-track ownership independent from perception-worker readiness. A slow model load, failed analysis frame, worker restart, or visual upload error must not stop an otherwise healthy camera stream.
 
 ## Approved landing direction — First Breath — 2026-08-05
@@ -54,6 +54,6 @@ The eye enters a near-black blue-green field and lands on one living facial cons
 - Restore face-relative normalization lost when commit `55a3457` connected the persistent GPU field. Raw camera coordinates made the mesh too small and unstable to act as the experience's focal mirror.
 - Keep one legible astral face in the field. Live center, scale, yaw, pitch, roll, mouth, brow, eye, warmth, and tension signals may move and reshape it; no emotion or diagnostic label is inferred or displayed.
 - Report the observable expression channels behind `?` so the user can verify that sensing is live without exposing a composite stillness score.
-- Remove the ambient soothing bed. The optional, off-by-default vowel voice remains the only generated audio.
+- Remove the vowel synthesis. The optional filtered-surf layer remains the only generated audio; album playback streams from a separately provisioned server directory and is excluded from the service-worker cache.
 - Protect landing copy from the brightest procedural frames with a local shadow field. Do not rely on CSS blend modes for essential text contrast.
 - Cap final display output below the earlier white-out level so Radiance remains luminous rather than blinding.

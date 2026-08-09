@@ -20,6 +20,7 @@ import {
   defaultSessionPreferences,
   type SessionPreferences,
   type SessionTuning,
+  type SoundMode,
 } from './session-preferences.ts';
 
 type ExperienceMode = 'ready' | 'starting' | 'calibrating' | 'active' | 'error';
@@ -100,29 +101,11 @@ function isEditableTarget(target: EventTarget | null): boolean {
     && (target.isContentEditable || target.matches('input, textarea, select'));
 }
 
-function mirrorProgressLabel(telemetry: SessionTelemetry): string {
-  if (telemetry.source === 'scripted') return 'A gentle rhythm is opening';
-  if (telemetry.sensingQuality < 0.25) return 'The field is finding your signal';
-  if (telemetry.direction === 'rising' && telemetry.turbulence >= 0.45) {
-    return 'The field is active · lengthen the exhale';
-  }
-  if (telemetry.direction === 'settling') {
-    return telemetry.relief >= 0.68
-      ? 'The clearing is widening · stay with this'
-      : 'The clearing is opening · stay with this';
-  }
-  if (telemetry.readiness >= 0.68) return 'Clear and ready when you are';
-  if (telemetry.relief >= 0.68) return 'More space is opening';
-  if (telemetry.expressionActivity >= 0.42 || telemetry.movement >= 0.42) {
-    return 'Energy rising · soften the jaw';
-  }
-  return 'The light is steady · let the exhale lengthen';
-}
-
 export function StillnessExperience() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const controllerRef = useRef<SessionController | null>(null);
+  const audioRef = useRef<StillnessAudio | null>(null);
   const rendererRef = useRef<SoulMirrorRenderer | null>(null);
   const controllerTokenRef = useRef<SessionToken | null>(null);
   const cameraRequestRef = useRef(0);
@@ -138,7 +121,12 @@ export function StillnessExperience() {
   const [cue, setCue] = useState<GuidanceCue | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [audioAvailable, setAudioAvailable] = useState(true);
+  const [musicAvailable, setMusicAvailable] = useState(false);
   const [cameraAvailable, setCameraAvailable] = useState(true);
+
+  if (audioRef.current === null) {
+    audioRef.current = new StillnessAudio(defaultSessionPreferences.soundMode);
+  }
 
   const reportUnavailableCamera = useCallback((
     token: SessionToken | null = controllerTokenRef.current,
@@ -192,6 +180,7 @@ export function StillnessExperience() {
       setCue(null);
       setMenuOpen(false);
       setAudioAvailable(true);
+      setMusicAvailable(false);
       setCameraAvailable(true);
       setMode('ready');
       setMessage('');
@@ -200,8 +189,8 @@ export function StillnessExperience() {
   }, []);
 
   const togglePreference = useCallback((
-    preference: 'mode' | 'vocal' | 'liveSignals' | 'camera' | 'visualControl',
-    enabled: boolean | SessionPreferences['mode'] | SessionPreferences['visualControl'],
+    preference: 'mode' | 'soundMode' | 'liveSignals' | 'camera' | 'visualControl',
+    enabled: boolean | SessionPreferences['mode'] | SessionPreferences['visualControl'] | SoundMode,
   ) => {
     if (preference === 'mode') {
       const nextMode = enabled === 'guided' ? 'guided' : 'pure';
@@ -224,20 +213,35 @@ export function StillnessExperience() {
       return;
     }
 
+    if (preference === 'soundMode') {
+      const soundMode: SoundMode = enabled === 'music'
+        ? 'music'
+        : enabled === 'waves'
+          ? 'waves'
+          : 'off';
+      const controller = controllerRef.current;
+      const token = controllerTokenRef.current;
+      if (!controller || token === null) return;
+      void controller.setSoundMode(soundMode).then((available) => {
+        if (!transitionsRef.current.owns(token)) return;
+        if (!available) {
+          setMessage(soundMode === 'music'
+            ? 'The local album stream is not available on this server.'
+            : 'Sound is unavailable in this browser.');
+          return;
+        }
+        setMessage('');
+        setPreferences((current) => ({ ...current, soundMode }));
+        trackEvent('session_preference_changed', { preference, enabled: soundMode });
+      });
+      return;
+    }
+
     const nextEnabled = Boolean(enabled);
     setPreferences((current) => ({ ...current, [preference]: nextEnabled }));
     trackEvent('session_preference_changed', { preference, enabled: nextEnabled });
 
-    if (preference === 'vocal') {
-      const controller = controllerRef.current;
-      const token = controllerTokenRef.current;
-      controller?.setVocalEnabled(nextEnabled);
-      void controller?.setVocalAudible(nextEnabled).then((available) => {
-        if (token !== null && transitionsRef.current.owns(token)) {
-          setAudioAvailable(available);
-        }
-      });
-    } else if (preference === 'camera') {
+    if (preference === 'camera') {
       const token = controllerTokenRef.current;
       const cameraRequest = ++cameraRequestRef.current;
       const controller = controllerRef.current;
@@ -286,6 +290,7 @@ export function StillnessExperience() {
   }, [mode, startAmbientField]);
 
   useEffect(() => {
+    void audioRef.current?.prime();
     const localDevelopment = window.location.hostname === 'localhost'
       || window.location.hostname === '127.0.0.1';
     if ('serviceWorker' in navigator && !localDevelopment) {
@@ -294,6 +299,7 @@ export function StillnessExperience() {
         const urls = performance.getEntriesByType('resource')
           .map((entry) => new URL(entry.name))
           .filter((url) => url.origin === window.location.origin)
+          .filter((url) => !url.pathname.startsWith('/local-music/'))
           .map((url) => `${url.pathname}${url.search}`);
         registration.active?.postMessage({ type: 'CACHE_URLS', urls });
       }).catch(() => {
@@ -312,7 +318,10 @@ export function StillnessExperience() {
       controllerRef.current = null;
       controllerTokenRef.current = null;
       void controller?.stop();
-      if (controller === null) rendererRef.current?.dispose();
+      if (controller === null) {
+        rendererRef.current?.dispose();
+        audioRef.current?.dispose();
+      }
       rendererRef.current = null;
     };
   }, []);
@@ -341,8 +350,8 @@ export function StillnessExperience() {
         case 'menu':
           setMenuOpen((open) => !open);
           break;
-        case 'vocal':
-          togglePreference('vocal', !preferences.vocal);
+        case 'sound':
+          togglePreference('soundMode', preferences.soundMode === 'off' ? 'waves' : 'off');
           break;
         case 'guidance':
           togglePreference('mode', preferences.mode === 'guided' ? 'pure' : 'guided');
@@ -388,6 +397,7 @@ export function StillnessExperience() {
     setCue(null);
     setMenuOpen(false);
     setAudioAvailable(true);
+    setMusicAvailable(false);
     setCameraAvailable(preferences.camera);
 
     let controller: SessionController | null = null;
@@ -398,7 +408,7 @@ export function StillnessExperience() {
       rendererRef.current = renderer;
       controller = new SessionController({
         renderer,
-        audio: new StillnessAudio(),
+        audio: audioRef.current ?? new StillnessAudio(preferences.soundMode),
         camera,
         motion: new MotionSensor(),
         baseline: baselineRef.current,
@@ -428,7 +438,6 @@ export function StillnessExperience() {
         },
       });
       controller.setTuning(preferences.tuning);
-      controller.setVocalEnabled(preferences.vocal);
       controllerRef.current = controller;
       controllerTokenRef.current = token;
 
@@ -448,17 +457,27 @@ export function StillnessExperience() {
       } else if (startResult.cameraStarted) {
         setCameraAvailable(true);
       }
-      const available = await controller.setVocalAudible(preferences.vocal);
+      const soundAvailable = controller.isAudioAvailable();
+      const localMusicAvailable = controller.isMusicAvailable();
+      const soundApplied = soundAvailable && (
+        preferences.soundMode === 'off'
+        || await controller.setSoundMode(preferences.soundMode)
+      );
+      if (!soundApplied && soundAvailable) {
+        await controller.setSoundMode('off');
+        setPreferences((current) => ({ ...current, soundMode: 'off' }));
+      }
       if (startResult.cameraStarted) await controller.waitForCalibration();
       if (!transitionsRef.current.owns(token)) return;
       transitionsRef.current.activate(token, () => {
-        setAudioAvailable(available);
+        setAudioAvailable(soundAvailable);
+        setMusicAvailable(localMusicAvailable);
         setMode('active');
         setMessage('');
         trackEvent('session_started', {
           mode: preferences.mode,
           guidance: preferences.mode === 'guided',
-          vocal: preferences.vocal,
+          sound: soundApplied ? preferences.soundMode : 'off',
           camera: startResult.cameraStarted,
         });
       });
@@ -512,14 +531,7 @@ export function StillnessExperience() {
         <>
           {preferences.mode === 'guided' ? (
             <>
-              <p
-                className="mirror-progress"
-                data-direction={telemetry.direction}
-                aria-live="polite"
-              >
-                {mirrorProgressLabel(telemetry)}
-              </p>
-              <SessionGuidance cue={cue} visible />
+              <SessionGuidance key={cue?.id ?? 'quiet'} cue={cue} visible />
             </>
           ) : null}
           <button
@@ -529,12 +541,13 @@ export function StillnessExperience() {
             aria-label="Adjust session"
             onClick={() => setMenuOpen(true)}
           >
-            <span aria-hidden="true">?</span> adjust session
+            <span aria-hidden="true">?</span>
           </button>
           <SessionMenu
             preferences={preferences}
             telemetry={telemetry}
             audioAvailable={audioAvailable}
+            musicAvailable={musicAvailable}
             cameraAvailable={cameraAvailable}
             open={menuOpen}
             triggerRef={menuTriggerRef}

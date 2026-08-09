@@ -6,10 +6,10 @@ import {
   defaultSessionPreferences,
 } from '../src/experience/session-preferences.ts';
 
-test('Pure mode starts with vowel voice off and live signals visible', () => {
+test('Pure mode starts with the streamed album and live signals visible', () => {
   assert.deepEqual(defaultSessionPreferences, {
     mode: 'pure',
-    vocal: false,
+    soundMode: 'music',
     liveSignals: true,
     camera: true,
     visualControl: 'auto',
@@ -26,7 +26,7 @@ test('Pure mode starts with vowel voice off and live signals visible', () => {
 
 test('commandForKey maps unmodified shortcuts and ignores form entry', () => {
   assert.equal(commandForKey({ key: '?', modifier: false, editable: false }), 'menu');
-  assert.equal(commandForKey({ key: 'm', modifier: false, editable: false }), 'vocal');
+  assert.equal(commandForKey({ key: 'm', modifier: false, editable: false }), 'sound');
   assert.equal(commandForKey({ key: 'G', modifier: false, editable: false }), 'guidance');
   assert.equal(commandForKey({ key: 'd', modifier: true, editable: false }), null);
   assert.equal(commandForKey({ key: 'c', modifier: false, editable: true }), null);

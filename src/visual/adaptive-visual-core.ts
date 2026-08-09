@@ -52,6 +52,8 @@ const warpUniformNames = [
   'uVariationSeed',
   'uBreathScale',
   'uReducedMotion',
+  'uAudioActive',
+  'uAudioBeat',
 ] as const;
 
 const sceneUniformNames = [
@@ -99,6 +101,8 @@ const faceUniformNames = [
   'uPaletteLight',
   'uPaletteConfidence',
   'uColorInfluence',
+  'uAudioActive',
+  'uAudioBeat',
 ] as const;
 
 const blurUniformNames = [
@@ -112,6 +116,11 @@ const compositeUniformNames = [
   'uBloom',
   'uResolution',
   'uVisualIntensity',
+  'uAudioActive',
+  'uAudioEnergy',
+  'uAudioBass',
+  'uAudioBeat',
+  'uAudioHue',
 ] as const;
 
 type ProgramBinding<UniformName extends string> = {
@@ -150,6 +159,11 @@ const initialControlFrame: AdaptiveVisualControlFrame = {
   breathPhase: 0,
   breathConfidence: 0,
   coherence: 0,
+  audioActive: false,
+  audioEnergy: 0,
+  audioBass: 0,
+  audioBeat: 0,
+  audioHue: 0,
   palette: {
     shadow: [0, 0, 0],
     mid: [0.02, 0.04, 0.08],
@@ -607,6 +621,8 @@ export class AdaptiveVisualCore {
     gl.uniform1f(uniforms.uVariationSeed, this.safeVariationSeed(frame.variationSeed));
     gl.uniform1f(uniforms.uBreathScale, breathScale);
     gl.uniform1f(uniforms.uReducedMotion, reducedMotion);
+    gl.uniform1f(uniforms.uAudioActive, frame.audioActive ? 1 : 0);
+    gl.uniform1f(uniforms.uAudioBeat, clamp(frame.audioBeat ?? 0, 0, 1));
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
@@ -716,6 +732,8 @@ export class AdaptiveVisualCore {
     );
     gl.uniform1f(uniforms.uPaletteConfidence, clamp(frame.palette.confidence, 0, 1));
     gl.uniform1f(uniforms.uColorInfluence, clamp(frame.colorInfluence, 0.15, 0.25));
+    gl.uniform1f(uniforms.uAudioActive, frame.audioActive ? 1 : 0);
+    gl.uniform1f(uniforms.uAudioBeat, clamp(frame.audioBeat ?? 0, 0, 1));
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, segmentCount);
   }
 
@@ -766,6 +784,11 @@ export class AdaptiveVisualCore {
     gl.uniform1i(uniforms.uBloom, 1);
     gl.uniform2f(uniforms.uResolution, resources.width, resources.height);
     gl.uniform1f(uniforms.uVisualIntensity, clamp(frame.visualIntensity, 0.75, 1.25));
+    gl.uniform1f(uniforms.uAudioActive, frame.audioActive ? 1 : 0);
+    gl.uniform1f(uniforms.uAudioEnergy, clamp(frame.audioEnergy ?? 0, 0, 1));
+    gl.uniform1f(uniforms.uAudioBass, clamp(frame.audioBass ?? 0, 0, 1));
+    gl.uniform1f(uniforms.uAudioBeat, clamp(frame.audioBeat ?? 0, 0, 1));
+    gl.uniform1f(uniforms.uAudioHue, clamp(frame.audioHue ?? 0, 0, 1));
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 

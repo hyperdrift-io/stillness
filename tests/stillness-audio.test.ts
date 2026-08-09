@@ -225,12 +225,12 @@ const activeState: ResonanceState = {
   space: 0.15,
 };
 
-test('a restarted audio instance begins audible at the default adaptive gain', async () => {
+test('a restarted audio instance stays silent by default', async () => {
   await withAudioContext({}, async (contexts) => {
     const audio = new StillnessAudio();
     await audio.start();
     audio.update(activeState, 1);
-    await audio.setAudible(false);
+    await audio.setMode('off');
     audio.dispose();
 
     await audio.start();
@@ -238,22 +238,22 @@ test('a restarted audio instance begins audible at the default adaptive gain', a
     assert.equal(contexts.length, 2);
     assert.deepEqual(contexts[1]?.gains[0]?.gain.events.at(-1), {
       type: 'ramp',
-      value: 0.08,
+      value: 0.0001,
       time: 5.8,
     });
   });
 });
 
-test('audibility fades hold the current scheduled value before targeting', async () => {
+test('sound mode fades hold the current scheduled value before targeting', async () => {
   await withAudioContext({}, async (contexts) => {
     const audio = new StillnessAudio();
     await audio.start();
 
-    await audio.setAudible(false);
+    await audio.setMode('waves');
 
     assert.deepEqual(contexts[0]?.gains[0]?.gain.events.slice(-2), [
       { type: 'hold', time: 4 },
-      { type: 'target', value: 0.0001, time: 4, timeConstant: 0.08 },
+      { type: 'target', value: 0.28, time: 4, timeConstant: 0.45 },
     ]);
   });
 });
@@ -267,24 +267,24 @@ test('disposal holds the current scheduled value before targeting silence', asyn
 
     assert.deepEqual(contexts[0]?.gains[0]?.gain.events.slice(-2), [
       { type: 'hold', time: 4 },
-      { type: 'target', value: 0.0001, time: 4, timeConstant: 0.02 },
+      { type: 'target', value: 0.0001, time: 4, timeConstant: 0.08 },
     ]);
   });
 });
 
-test('repeated starts and audibility calls are idempotent', async () => {
+test('repeated starts and sound mode calls are idempotent', async () => {
   await withAudioContext({}, async (contexts) => {
     const audio = new StillnessAudio();
     await audio.start();
     await audio.start();
     const master = contexts[0]?.gains[0]?.gain;
 
-    await audio.setAudible(false);
-    const scheduledAfterMute = master?.events.length;
-    await audio.setAudible(false);
+    await audio.setMode('waves');
+    const scheduledAfterEnable = master?.events.length;
+    await audio.setMode('waves');
 
     assert.equal(contexts.length, 1);
-    assert.equal(master?.events.length, scheduledAfterMute);
+    assert.equal(master?.events.length, scheduledAfterEnable);
   });
 });
 
@@ -292,15 +292,16 @@ test('enabling sound resumes a suspended context before scheduling its fade', as
   await withAudioContext({}, async (contexts) => {
     const audio = new StillnessAudio();
     await audio.start();
-    await audio.setAudible(false);
+    await audio.setMode('waves');
+    await audio.setMode('off');
     const context = contexts[0];
     assert.ok(context);
     context.state = 'suspended';
 
-    await audio.setAudible(true);
+    await audio.setMode('waves');
 
     assert.equal(context.resumeCalls, 1);
-    assert.equal(targetEvents(context.gains[0]!.gain).at(-1)?.value, 0.08);
+    assert.equal(targetEvents(context.gains[0]!.gain).at(-1)?.value, 0.28);
   });
 });
 
@@ -308,32 +309,32 @@ test('adaptive updates remain current while sound is muted', async () => {
   await withAudioContext({}, async (contexts) => {
     const audio = new StillnessAudio();
     await audio.start();
-    await audio.setAudible(false);
+    await audio.setMode('off');
 
     audio.update(activeState, 1);
     const master = contexts[0]!.gains[0]!.gain;
     assert.equal(targetEvents(master).at(-1)?.value, 0.0001);
 
-    await audio.setAudible(true);
-    assert.equal(targetEvents(master).at(-1)?.value, 0.62);
+    await audio.setMode('waves');
+    assert.equal(targetEvents(master).at(-1)?.value, 0.28);
   });
 });
 
 test('unavailable audio returns false and a rejected resume leaves no fade scheduled', async () => {
   const unavailable = new StillnessAudio();
-  assert.equal(await unavailable.setAudible(true), false);
+  assert.equal(await unavailable.setMode('waves'), false);
 
   await withAudioContext({}, async (contexts) => {
     const audio = new StillnessAudio();
     await audio.start();
-    await audio.setAudible(false);
+    await audio.setMode('off');
     const context = contexts[0]!;
     const master = context.gains[0]!.gain;
     const scheduledBeforeEnable = master.events.length;
     context.state = 'suspended';
     context.rejectResume = true;
 
-    await assert.rejects(() => audio.setAudible(true), /resume rejected/);
+    await assert.rejects(() => audio.setMode('waves'), /resume rejected/);
     assert.equal(master.events.length, scheduledBeforeEnable);
   });
 });
@@ -345,12 +346,12 @@ test('audibility fades safely fall back when cancel-and-hold is unavailable', as
     const master = contexts[0]!.gains[0]!.gain;
     master.value = 0.037;
 
-    await audio.setAudible(false);
+    await audio.setMode('waves');
 
     assert.deepEqual(master.events.slice(-3), [
       { type: 'cancel', time: 4 },
       { type: 'set', value: 0.037, time: 4 },
-      { type: 'target', value: 0.0001, time: 4, timeConstant: 0.08 },
+      { type: 'target', value: 0.28, time: 4, timeConstant: 0.45 },
     ]);
   });
 });

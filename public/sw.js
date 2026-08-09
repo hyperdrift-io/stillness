@@ -1,4 +1,4 @@
-const CACHE = 'stillness-shell-v2';
+const CACHE = 'stillness-shell-v3';
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -15,7 +15,11 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
   if (event.data?.type !== 'CACHE_URLS' || !Array.isArray(event.data.urls)) return;
-  const urls = event.data.urls.filter((url) => typeof url === 'string' && url.startsWith('/'));
+  const urls = event.data.urls.filter((url) => (
+    typeof url === 'string'
+    && url.startsWith('/')
+    && !url.startsWith('/local-music/')
+  ));
   event.waitUntil(
     caches.open(CACHE).then((cache) =>
       Promise.allSettled(urls.map((url) => cache.add(url))),
@@ -26,6 +30,7 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
+  if (new URL(request.url).pathname.startsWith('/local-music/')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).then((response) => {

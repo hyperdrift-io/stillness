@@ -39,11 +39,13 @@ test('session menu uses a labelled native dialog and every approved control', as
     /return \(\) => \{\s*closeOpenDialogAndRestoreFocus\(dialog, triggerRef\.current\);\s*\};/,
   );
 
-  for (const label of ['Guided mode', 'Vowel voice', 'Live signals', 'Camera sensing']) {
+  for (const label of ['Guided mode', 'Gentle waves', 'Local album', 'Live signals', 'Camera sensing']) {
     assert.match(source, new RegExp(label));
   }
 
-  assert.equal(source.match(/type="checkbox"/g)?.length, 5);
+  assert.equal(source.match(/type="checkbox"/g)?.length, 4);
+  assert.match(source, /type="radio"/);
+  assert.match(source, /name="sound-mode"/);
   assert.equal(source.match(/<meter/g)?.length, 1);
   assert.match(source, /preferences\.liveSignals \? \(/);
   assert.match(source, /Leave experience/);
@@ -55,7 +57,7 @@ test('privacy copy states the exact in-memory processing boundary', async () => 
 
   assert.match(
     source,
-    /Camera, audio, and motion signals are processed only in memory on this device, then discarded\. Nothing is saved or sent\./,
+    /Camera and motion signals stay in memory on this device, then are discarded\. Album playback is analysed only in this browser\. Nothing is uploaded\./,
   );
 });
 
@@ -152,9 +154,10 @@ test('guidance exposes one polite live region', async () => {
   const source = await read('src/experience/session-guidance.tsx');
 
   assert.match(source, /aria-live="polite"/);
-  assert.match(source, /className="signal-label">\{cue\.label\}/);
+  assert.match(source, /data-cue=\{cue\.id\}/);
+  assert.match(source, /className="visually-hidden">\{cue\.label\}/);
   assert.match(source, /cue\.invitation/);
-  assert.match(source, /className="signal-explanation">\{cue\.explanation\}/);
+  assert.match(source, /className="visually-hidden">\{cue\.explanation\}/);
   assert.doesNotMatch(source, />Guidance</);
   assert.equal(source.match(/aria-live=/g)?.length, 1);
 });
