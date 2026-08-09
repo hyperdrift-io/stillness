@@ -4,7 +4,7 @@ import {
   type FaceLandmarkerResult,
 } from '@mediapipe/tasks-vision';
 
-export const VISION_WASM_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm';
+export const VISION_WASM_BASE = '/wasm';
 export const FACE_LANDMARKER_MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 export const POSE_LANDMARKER_MODEL_URL =
@@ -47,7 +47,7 @@ export function faceLandmarkConnections(): FaceLandmarkConnection[] {
 
 
 export async function createFaceLandmarkerClient(): Promise<FaceLandmarkerClient> {
-  const vision = await FilesetResolver.forVisionTasks(VISION_WASM_BASE);
+  const vision = await FilesetResolver.forVisionTasks(VISION_WASM_BASE, true);
   const landmarker = await FaceLandmarker.createFromOptions(vision, {
     baseOptions: {
       modelAssetPath: FACE_LANDMARKER_MODEL_URL,

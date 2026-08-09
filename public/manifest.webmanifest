@@ -2,14 +2,14 @@
   "id": "/",
   "name": "Stillness",
   "short_name": "Stillness",
-  "description": "A private audiovisual descent from activation into stillness.",
+  "description": "A private, face-driven reset that helps you return with more room.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "display_override": ["fullscreen", "standalone"],
   "orientation": "portrait-primary",
-  "background_color": "#030407",
-  "theme_color": "#030407",
+  "background_color": "#061a1f",
+  "theme_color": "#061a1f",
   "categories": ["health", "lifestyle"],
   "icons": [
     {

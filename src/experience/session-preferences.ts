@@ -11,7 +11,7 @@ export type SessionTuning = {
 
 export type SessionPreferences = {
   mode: SessionMode;
-  sound: boolean;
+  vocal: boolean;
   liveSignals: boolean;
   camera: boolean;
   visualControl: VisualControl;
@@ -21,8 +21,8 @@ export type SessionPreferences = {
 
 export const defaultSessionPreferences: SessionPreferences = Object.freeze({
   mode: 'pure',
-  sound: false,
-  liveSignals: false,
+  vocal: false,
+  liveSignals: true,
   camera: true,
   visualControl: 'auto',
   variationSeed: 0,
@@ -35,7 +35,7 @@ export const defaultSessionPreferences: SessionPreferences = Object.freeze({
   },
 });
 
-export type SessionCommand = 'menu' | 'sound' | 'guidance' | 'signals' | 'camera' | 'variation';
+export type SessionCommand = 'menu' | 'vocal' | 'guidance' | 'signals' | 'camera' | 'variation';
 
 export function commandForKey(input: {
   key: string;
@@ -45,7 +45,7 @@ export function commandForKey(input: {
   if (input.modifier || input.editable) return null;
   const key = input.key.toLowerCase();
   if (input.key === '?') return 'menu';
-  if (key === 'm') return 'sound';
+  if (key === 'm') return 'vocal';
   if (key === 'g') return 'guidance';
   if (key === 'd') return 'signals';
   if (key === 'c') return 'camera';

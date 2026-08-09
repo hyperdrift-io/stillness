@@ -6,7 +6,7 @@ import type { SessionPreferences, SessionTuning } from './session-preferences.ts
 
 type TelemetryDirection = SessionTelemetry['direction'];
 type TelemetrySource = SessionTelemetry['source'];
-type Preference = 'mode' | 'sound' | 'liveSignals' | 'camera' | 'visualControl';
+type Preference = 'mode' | 'vocal' | 'liveSignals' | 'camera' | 'visualControl';
 type PreferenceValue = boolean | SessionPreferences['mode'] | SessionPreferences['visualControl'];
 type DialogLifecycle = Pick<HTMLDialogElement, 'close' | 'open'>;
 type FocusTarget = Pick<HTMLElement, 'focus'>;
@@ -15,6 +15,7 @@ type SessionMenuProps = {
   preferences: SessionPreferences;
   telemetry: SessionTelemetry;
   audioAvailable: boolean;
+  cameraAvailable: boolean;
   open: boolean;
   triggerRef: RefObject<HTMLElement | null>;
   onToggle: (preference: Preference, enabled: PreferenceValue) => void;
@@ -69,16 +70,13 @@ export function expressionChannelLabel(value: number): 'quiet' | 'visible' | 'dr
   return 'driving';
 }
 
-export function reliefLabel(value: number): 'forming' | 'arriving' | 'clear' {
-  if (value < 0.35) return 'forming';
-  if (value < 0.72) return 'arriving';
-  return 'clear';
-}
-
-export function readinessLabel(value: number): 'restoring' | 'returning' | 'readying' {
-  if (value < 0.35) return 'restoring';
-  if (value < 0.72) return 'returning';
-  return 'readying';
+export function breathingLabel(
+  value: number,
+  confidence: number,
+): 'learning' | 'forming' | 'regular' {
+  if (confidence < 0.35) return 'learning';
+  if (value < 0.65) return 'forming';
+  return 'regular';
 }
 
 export function closeOpenDialogAndRestoreFocus(
@@ -95,6 +93,7 @@ export function SessionMenu({
   preferences,
   telemetry,
   audioAvailable,
+  cameraAvailable,
   open,
   triggerRef,
   onToggle,
@@ -153,15 +152,16 @@ export function SessionMenu({
           <input
             type="checkbox"
             role="switch"
-            checked={preferences.sound}
+            checked={preferences.vocal}
             disabled={!audioAvailable}
-            aria-describedby={!audioAvailable ? 'sound-unavailable' : undefined}
-            onChange={(event) => onToggle('sound', event.currentTarget.checked)}
+            aria-describedby={!audioAvailable ? 'vocal-unavailable' : undefined}
+            onChange={(event) => onToggle('vocal', event.currentTarget.checked)}
           />
-          <span>Soothing sound</span>
+          <span>Vowel voice</span>
           <kbd aria-label="Keyboard shortcut M">M</kbd>
         </label>
-        {!audioAvailable ? <small id="sound-unavailable">Sound is unavailable in this browser.</small> : null}
+        {!audioAvailable ? <small id="vocal-unavailable">Vowel voice is unavailable in this browser.</small> : null}
+        <small>An original vowel voice emerges gradually as the field settles.</small>
         <label>
           <input
             type="checkbox"
@@ -182,6 +182,14 @@ export function SessionMenu({
           <span>Camera sensing</span>
           <kbd aria-label="Keyboard shortcut C">C</kbd>
         </label>
+        {preferences.camera && !cameraAvailable ? (
+          <div className="camera-reconnect">
+            <small>Camera is paused. Reconnect when you’re ready.</small>
+            <button type="button" className="menu-action" onClick={() => onToggle('camera', true)}>
+              Reconnect camera
+            </button>
+          </div>
+        ) : null}
         <button type="button" className="menu-action" onClick={onNextVariation}>
           <span>Next visual</span>
           <kbd aria-label="Keyboard shortcut V">V</kbd>
@@ -202,16 +210,16 @@ export function SessionMenu({
           <h3 id="live-signals-title">Live signals</h3>
           {[
             ['movement', 'Movement', telemetry.movement, movementLabel(telemetry.movement, telemetry.direction)],
+            ['head-turn', 'Head turn', telemetry.headTurn ?? 0, expressionChannelLabel(telemetry.headTurn ?? 0)],
             ['expression', 'Expression signals', telemetry.expressionActivity, expressionLabel(telemetry.expressionActivity)],
-            ['mouth-open', 'Mouth opening', telemetry.expression.mouthOpen, expressionChannelLabel(telemetry.expression.mouthOpen)],
-            ['mouth-smile', 'Mouth lift', telemetry.expression.mouthSmile, expressionChannelLabel(telemetry.expression.mouthSmile)],
-            ['brow-lift', 'Brow lift', telemetry.expression.browLift, expressionChannelLabel(telemetry.expression.browLift)],
-            ['brow-tension', 'Brow tension', telemetry.expression.browTension, expressionChannelLabel(telemetry.expression.browTension)],
-            ['eye-closure', 'Eye closure', telemetry.expression.eyeClosure, expressionChannelLabel(telemetry.expression.eyeClosure)],
-            ['turbulence', 'Turbulence', telemetry.turbulence, telemetry.direction === 'rising' ? 'rising' : 'settling'],
-            ['settling', 'Settling', telemetry.settling, steadinessLabel(telemetry.settling)],
-            ['relief', 'Relief', telemetry.relief, reliefLabel(telemetry.relief)],
-            ['readiness', 'Readiness', telemetry.readiness, readinessLabel(telemetry.readiness)],
+            ['mouth', 'Mouth movement', telemetry.expression.mouthOpen, expressionChannelLabel(telemetry.expression.mouthOpen)],
+            ['brow', 'Brow movement', telemetry.expression.browLift, expressionChannelLabel(telemetry.expression.browLift)],
+            ['eyes', 'Eye movement', telemetry.expression.eyeClosure, expressionChannelLabel(telemetry.expression.eyeClosure)],
+            ['warmth', 'Facial warmth', telemetry.expression.mouthSmile, expressionChannelLabel(telemetry.expression.mouthSmile)],
+            ['facial-release', 'Facial softening', 1 - (telemetry.facialTension ?? (1 - telemetry.softness)), steadinessLabel(1 - (telemetry.facialTension ?? (1 - telemetry.softness)))],
+            ['breathing', 'Breathing rhythm', telemetry.breathRegularity ?? 0, breathingLabel(telemetry.breathRegularity ?? 0, telemetry.breathConfidence ?? 0)],
+            ['coherence', 'Signal coherence', telemetry.temporalCoherence ?? telemetry.steadiness, steadinessLabel(telemetry.temporalCoherence ?? telemetry.steadiness)],
+            ['presence', 'Face signal', telemetry.presence, presenceLabel(telemetry.presence, telemetry.source)],
             ['signal', 'Signal', telemetry.confidence, sensingLabel(telemetry.confidence, telemetry.source)],
           ].map(([id, name, value, state]) => (
             <p key={id}>
@@ -233,7 +241,7 @@ export function SessionMenu({
       ) : null}
 
       <p className="privacy-note">
-        Camera, audio, and motion signals are processed only in memory on this device, then discarded. Nothing is saved or sent.
+        Camera and motion signals are processed only in memory on this device, then discarded. Sound is generated here. Nothing is saved or sent.
       </p>
       <button type="button" className="text-action" onClick={onLeave}>
         Leave experience

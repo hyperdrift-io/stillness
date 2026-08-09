@@ -83,8 +83,8 @@ float sceneDecay(float scene) {
   if (scene < 0.5) return 0.935;
   if (scene < 1.5) return 0.955;
   if (scene < 2.5) return 0.970;
-  if (scene < 3.5) return 0.978;
-  return 0.985;
+  if (scene < 3.5) return 0.965;
+  return 0.955;
 }
 
 float sceneWarp(float scene) {
@@ -238,12 +238,12 @@ vec3 turbulenceGrammar(vec2 point, float time) {
   ) * step(0.46, noise21(point * 18.0 + floor(time * 1.4)));
   float embers = smoothstep(0.82, 1.0, noise21(point * 31.0 - time * 0.7))
     * (1.0 - smoothstep(0.1, 0.78, radius));
-  float core = exp(-radius * radius * 52.0) * 0.44;
-  float halo = exp(-radius * radius * 9.0) * 0.055;
-  vec3 red = mix(vec3(0.62, 0.018, 0.038), vec3(1.0, 0.12, 0.08), fractureNoise);
+  float core = exp(-radius * radius * 52.0) * 0.28;
+  float halo = exp(-radius * radius * 9.0) * 0.045;
+  vec3 red = mix(vec3(0.353, 0.200, 0.271), vec3(0.549, 0.337, 0.384), fractureNoise);
   return red * (broken * 0.16 + slash * 0.12 + embers * 0.035)
-    + vec3(1.0, 0.52, 0.30) * core
-    + vec3(0.44, 0.035, 0.07) * halo;
+    + vec3(0.690, 0.541, 0.322) * core
+    + vec3(0.353, 0.200, 0.271) * halo;
 }
 
 vec3 gatheringGrammar(vec2 point, float time) {
@@ -265,12 +265,12 @@ vec3 gatheringGrammar(vec2 point, float time) {
   ) * (1.0 - smoothstep(0.13, 0.68, radius));
   float convergence = pow(max(0.0, dot(safeNormalize(point), vec2(0.0, 1.0))), 7.0)
     * exp(-radius * 2.8);
-  float core = exp(-radius * radius * 43.0) * 0.55;
-  float halo = exp(-radius * radius * 7.4) * 0.078;
-  return vec3(1.0, 0.34, 0.035) * (orbitOne * 0.15 + spiral * 0.055)
-    + vec3(1.0, 0.63, 0.12) * (orbitTwo * 0.12 + convergence * 0.05)
-    + vec3(1.0, 0.79, 0.40) * core
-    + vec3(0.58, 0.18, 0.025) * halo;
+  float core = exp(-radius * radius * 43.0) * 0.32;
+  float halo = exp(-radius * radius * 7.4) * 0.060;
+  return vec3(0.431, 0.333, 0.184) * (orbitOne * 0.15 + spiral * 0.055)
+    + vec3(0.690, 0.541, 0.322) * (orbitTwo * 0.12 + convergence * 0.05)
+    + vec3(0.706, 0.608, 0.427) * core
+    + vec3(0.431, 0.333, 0.184) * halo;
 }
 
 vec3 coherenceGrammar(vec2 point, float time) {
@@ -288,12 +288,12 @@ vec3 coherenceGrammar(vec2 point, float time) {
   );
   float filaments = lineBand(sin(angle * 8.0) * 0.12 + radius - 0.31, 0.0035);
   float symmetry = mix(0.55, 1.0, clamp(uCoherence, 0.0, 1.0));
-  float core = exp(-radius * radius * 38.0) * 0.66;
-  float halo = exp(-radius * radius * 6.2) * 0.085;
-  return vec3(1.0, 0.62, 0.12) * (lattice * 0.052 + petals * 0.17) * symmetry
-    + vec3(0.48, 0.22, 1.0) * (filaments * 0.085 + lattice * 0.032)
-    + vec3(1.0, 0.88, 0.62) * core
-    + vec3(0.31, 0.16, 0.66) * halo;
+  float core = exp(-radius * radius * 38.0) * 0.36;
+  float halo = exp(-radius * radius * 6.2) * 0.070;
+  return vec3(0.706, 0.608, 0.427) * (lattice * 0.052 + petals * 0.17) * symmetry
+    + vec3(0.361, 0.322, 0.435) * (filaments * 0.085 + lattice * 0.032)
+    + vec3(0.706, 0.608, 0.427) * core
+    + vec3(0.361, 0.322, 0.435) * halo;
 }
 
 vec3 releaseGrammar(vec2 point, float time) {
@@ -310,13 +310,13 @@ vec3 releaseGrammar(vec2 point, float time) {
   float rippleOne = ringBand(radius, 0.27 + sin(time * 0.29) * 0.012, 0.0045);
   float rippleTwo = ringBand(radius, 0.45 + sin(time * 0.21 + 1.6) * 0.016, 0.0035);
   float liquid = noise21(vec2(point.x * 3.2, point.y * 7.0 - time * 0.12));
-  float core = exp(-radius * radius * 31.0) * 0.72;
-  float halo = exp(-radius * radius * 5.0) * 0.105;
-  return vec3(0.025, 0.20, 0.56) * (auroraOne * 0.13 + sky * liquid * 0.012)
-    + vec3(0.08, 0.58, 0.88) * (auroraTwo * 0.09 + rippleOne * 0.10)
-    + vec3(0.43, 0.78, 1.0) * rippleTwo * 0.075
-    + vec3(0.84, 0.94, 1.0) * core
-    + vec3(0.04, 0.24, 0.62) * halo;
+  float core = exp(-radius * radius * 31.0) * 0.38;
+  float halo = exp(-radius * radius * 5.0) * 0.080;
+  return vec3(0.122, 0.349, 0.388) * (auroraOne * 0.13 + sky * liquid * 0.012)
+    + vec3(0.420, 0.600, 0.616) * (auroraTwo * 0.09 + rippleOne * 0.10)
+    + vec3(0.435, 0.557, 0.533) * rippleTwo * 0.075
+    + vec3(0.847, 0.835, 0.749) * core
+    + vec3(0.122, 0.349, 0.388) * halo;
 }
 
 vec3 radianceGrammar(vec2 point, float time) {
@@ -326,18 +326,20 @@ vec3 radianceGrammar(vec2 point, float time) {
   stellarGas *= noise21(point * 11.0 - vec2(time * 0.024, time * 0.018));
   float rays = pow(max(0.0, cos(angle * 12.0 + sin(radius * 8.0) * 0.28)), 18.0)
     * exp(-radius * 4.8);
-  float shell = ringBand(radius, 0.34, 0.003) * 0.72
-    + ringBand(radius, 0.51, 0.0025) * 0.34;
-  float presence = exp(-radius * radius * 24.0) * 0.92;
-  float core = exp(-radius * radius * 92.0) * 1.25;
-  float halo = exp(-radius * radius * 3.8) * 0.13;
+  float shell = ringBand(radius, 0.34, 0.0045) * 0.72
+    + ringBand(radius, 0.51, 0.0035) * 0.34;
+  float clearing = smoothstep(0.08, 0.24, radius)
+    * (1.0 - smoothstep(0.46, 0.82, radius));
+  float presence = exp(-radius * radius * 24.0) * 0.075;
+  float core = exp(-radius * radius * 92.0) * 0.055;
+  float halo = exp(-radius * radius * 3.8) * 0.032;
   float gasMask = (1.0 - smoothstep(0.18, 0.76, radius))
     * smoothstep(0.28, 0.76, stellarGas);
-  return vec3(0.68, 0.84, 1.0) * (gasMask * 0.055 + shell * 0.055)
-    + vec3(0.92, 0.90, 1.0) * rays * 0.06
-    + vec3(0.94, 0.98, 1.0) * presence
-    + vec3(1.0) * core
-    + vec3(0.28, 0.48, 0.76) * halo;
+  return vec3(0.435, 0.557, 0.533) * (gasMask * 0.04 + shell * 0.09 + clearing * 0.012)
+    + vec3(0.706, 0.608, 0.427) * rays * 0.035
+    + vec3(0.847, 0.835, 0.749) * presence
+    + vec3(0.847, 0.835, 0.749) * core
+    + vec3(0.435, 0.557, 0.533) * halo;
 }
 
 vec3 sceneGrammar(float scene, vec2 point, float time) {
@@ -358,19 +360,19 @@ vec3 sceneGrammar(float scene, vec2 point, float time) {
   vec3 accent;
   if (scene < 0.5) {
     base = turbulenceGrammar(grammarPoint, time);
-    accent = vec3(1.0, 0.12, 0.08);
+    accent = vec3(0.549, 0.337, 0.384);
   } else if (scene < 1.5) {
     base = gatheringGrammar(grammarPoint, time);
-    accent = vec3(1.0, 0.63, 0.12);
+    accent = vec3(0.690, 0.541, 0.322);
   } else if (scene < 2.5) {
     base = coherenceGrammar(grammarPoint, time);
-    accent = vec3(0.76, 0.48, 1.0);
+    accent = vec3(0.706, 0.608, 0.427);
   } else if (scene < 3.5) {
     base = releaseGrammar(grammarPoint, time);
-    accent = vec3(0.43, 0.78, 1.0);
+    accent = vec3(0.420, 0.600, 0.616);
   } else {
     base = radianceGrammar(grammarPoint, time);
-    accent = vec3(0.94, 0.98, 1.0);
+    accent = vec3(0.847, 0.835, 0.749);
   }
 
   float radius = length(point);
@@ -430,14 +432,26 @@ layout(location = 1) in vec3 aEnd;
 
 uniform vec2 uResolution;
 uniform float uTime;
+uniform vec2 uFaceCenter;
+uniform float uFaceScale;
+uniform float uFaceConfidence;
+uniform float uHeadYaw;
+uniform float uHeadPitch;
+uniform float uHeadRoll;
 uniform float uFacialTension;
 uniform float uFacialWarmth;
+uniform float uExpressiveActivation;
+uniform float uMouthOpen;
+uniform float uBrowLift;
+uniform float uEyeClosure;
 uniform float uBreathScale;
 uniform float uReducedMotion;
 
 out float vAcross;
 out float vAlong;
 out float vDepth;
+out float vExpression;
+out float vPresence;
 
 const vec2 CORNERS[6] = vec2[6](
   vec2(0.0, -1.0),
@@ -448,16 +462,33 @@ const vec2 CORNERS[6] = vec2[6](
   vec2(0.0, 1.0)
 );
 
+vec2 facePoint(vec3 point) {
+  vec2 mirroredPoint = vec2(1.0 - point.x, 1.0 - point.y);
+  vec2 mirroredCenter = vec2(1.0 - uFaceCenter.x, 1.0 - uFaceCenter.y);
+  vec2 local = (mirroredPoint - mirroredCenter) / max(uFaceScale, 0.08);
+  local.x *= uResolution.y / max(uResolution.x, 1.0);
+  vec2 liveOffset = clamp(
+    (mirroredCenter - 0.5) * vec2(0.28, 0.18),
+    vec2(-0.1),
+    vec2(0.1)
+  );
+  return vec2(0.5) + liveOffset + local * 0.62;
+}
+
 void main() {
   vec2 corner = CORNERS[gl_VertexID];
-  vec2 start = vec2(aStart.x, 1.0 - aStart.y);
-  vec2 end = vec2(aEnd.x, 1.0 - aEnd.y);
+  vec2 start = facePoint(aStart);
+  vec2 end = facePoint(aEnd);
   vec2 delta = end - start;
   float segmentLength = length(delta);
   vec2 tangent = segmentLength > 0.000001 ? delta / segmentLength : vec2(1.0, 0.0);
   vec2 normal = vec2(-tangent.y, tangent.x);
   float tension = clamp(uFacialTension, 0.0, 1.0);
   float warmth = clamp(uFacialWarmth, 0.0, 1.0);
+  float activation = clamp(uExpressiveActivation, 0.0, 1.0);
+  float mouthOpen = clamp(uMouthOpen, 0.0, 1.0);
+  float browLift = clamp(uBrowLift, 0.0, 1.0);
+  float eyeClosure = clamp(uEyeClosure, 0.0, 1.0);
   float motionAllowance = mix(1.0, 0.18, clamp(uReducedMotion, 0.0, 1.0));
   float instancePhase = float(gl_InstanceID) * 0.754877666;
   float along = corner.x;
@@ -465,17 +496,49 @@ void main() {
     * tension * 0.006;
   float highFrequency = sin(along * mix(8.0, 22.0, tension) + instancePhase * 3.1 + uTime * 2.2)
     * tension * tension * 0.0018;
+  vec2 mirroredCenter = vec2(1.0 - uFaceCenter.x, 1.0 - uFaceCenter.y);
+  vec2 source = mix(
+    vec2(1.0 - aStart.x, 1.0 - aStart.y),
+    vec2(1.0 - aEnd.x, 1.0 - aEnd.y),
+    along
+  );
+  vec2 local = (source - mirroredCenter) / max(uFaceScale, 0.08);
+  float upperFace = smoothstep(0.02, 0.5, local.y);
+  float lowerFace = smoothstep(0.02, 0.5, -local.y);
+  float centerFace = 1.0 - smoothstep(0.18, 0.72, abs(local.x));
+  float mouthZone = lowerFace * centerFace;
+  float browZone = upperFace * smoothstep(0.04, 0.28, abs(local.x));
+  float eyeZone = upperFace * centerFace;
+  float expressionResponse = clamp(
+    activation * 0.28
+      + tension * 0.22
+      + warmth * 0.18
+      + mouthOpen * mouthZone * 0.2
+      + browLift * browZone * 0.08
+      + eyeClosure * eyeZone * 0.08,
+    0.0,
+    1.0
+  );
   vec2 center = mix(start, end, along)
     + normal * (curve + highFrequency) * motionAllowance;
+  center += vec2(uHeadYaw, -uHeadPitch) * 0.006 * motionAllowance;
+  center.y -= mouthOpen * mouthZone * 0.018;
+  center.y += browLift * browZone * 0.012;
+  center.y -= eyeClosure * eyeZone * 0.008;
+  float rollPulse = sin(uHeadRoll * 2.4 + instancePhase) * 0.0025;
+  center += normal * rollPulse * motionAllowance;
   center = (center - 0.5) * max(uBreathScale, 0.94) + 0.5;
 
   float depth = mix(aStart.z, aEnd.z, along);
   float depthPresence = 1.0 / (1.0 + abs(depth) * 7.0);
-  float widthPixels = mix(0.65, 1.7, warmth) * mix(0.78, 1.0, depthPresence);
+  float widthPixels = mix(1.2, 3.0, max(warmth, expressionResponse))
+    * mix(0.78, 1.0, depthPresence);
   vec2 position = center + normal * corner.y * widthPixels / max(uResolution, vec2(1.0));
   vAcross = corner.y;
   vAlong = along;
   vDepth = depthPresence;
+  vExpression = expressionResponse;
+  vPresence = clamp(uFaceConfidence, 0.0, 1.0);
   gl_Position = vec4(position * 2.0 - 1.0, 0.0, 1.0);
 }
 `;
@@ -485,6 +548,10 @@ precision highp float;
 
 uniform float uFacialTension;
 uniform float uFacialWarmth;
+uniform float uExpressiveActivation;
+uniform float uMouthOpen;
+uniform float uBrowLift;
+uniform float uEyeClosure;
 uniform float uVisualIntensity;
 uniform float uDeltaScale;
 uniform vec3 uPaletteLight;
@@ -494,24 +561,38 @@ uniform float uColorInfluence;
 in float vAcross;
 in float vAlong;
 in float vDepth;
+in float vExpression;
+in float vPresence;
 out vec4 outColor;
 
 void main() {
   float edge = 1.0 - smoothstep(0.34, 1.0, abs(vAcross));
-  float cap = smoothstep(0.0, 0.045, vAlong)
-    * smoothstep(0.0, 0.045, 1.0 - vAlong);
+  float cap = smoothstep(0.0, 0.065, vAlong)
+    * smoothstep(0.0, 0.065, 1.0 - vAlong);
   float tension = clamp(uFacialTension, 0.0, 1.0);
   float warmth = clamp(uFacialWarmth, 0.0, 1.0);
   vec3 cool = vec3(0.30, 0.50, 1.0);
   vec3 warm = vec3(1.0, 0.43, 0.12);
   vec3 authored = mix(cool, warm, warmth);
+  float expressionColor = clamp(
+    uExpressiveActivation * 0.24
+      + uMouthOpen * 0.22
+      + uBrowLift * 0.14
+      + uEyeClosure * 0.1
+      + vExpression * 0.3,
+    0.0,
+    0.72
+  );
+  authored = mix(authored, vec3(0.72, 0.48, 1.0), expressionColor);
   float paletteAmount = clamp(uColorInfluence, 0.15, 0.25)
     * clamp(uPaletteConfidence, 0.0, 1.0);
   vec3 color = mix(authored, uPaletteLight, paletteAmount);
-  float frequencySpark = mix(0.86, 1.18, tension);
-  float intensity = edge * cap * vDepth * frequencySpark
+  float frequencySpark = mix(0.92, 1.22, tension);
+  float connectedLine = edge * mix(0.72, 1.0, cap);
+  float intensity = connectedLine * vDepth * frequencySpark * vPresence
     * clamp(uVisualIntensity, 0.75, 1.25)
-    * max(uDeltaScale, 0.0) * 0.095;
+    * clamp(uDeltaScale, 0.0, 2.0)
+    * (0.12 + vExpression * 0.1 + warmth * 0.035);
   outColor = vec4(color * intensity, 1.0);
 }
 `;
@@ -567,13 +648,14 @@ vec3 acesApproximation(vec3 color) {
 void main() {
   vec3 feedback = texture(uFeedback, vUv).rgb;
   vec3 bloom = texture(uBloom, vUv).rgb;
-  vec3 color = feedback + bloom * 0.42;
+  vec3 color = feedback + bloom * 0.19;
   float maximum = max(max(color.r, color.g), color.b);
   float minimum = min(min(color.r, color.g), color.b);
   float chroma = maximum - minimum;
   float restraint = 1.0 - smoothstep(0.72, 1.75, chroma) * 0.16;
   float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
   color = mix(vec3(luminance), color, restraint);
+  color *= 1.0 / max(1.0, luminance / 0.72);
   color = acesApproximation(color * clamp(uVisualIntensity, 0.75, 1.25));
 
   float aspect = uResolution.x / max(uResolution.y, 1.0);
@@ -581,6 +663,9 @@ void main() {
   float vignette = 1.0 - smoothstep(0.44, 0.92, length(point)) * 0.34;
   color *= vignette;
   color = pow(color, vec3(1.0 / 2.2));
+  float displayPeak = max(max(color.r, color.g), color.b);
+  // Presence should feel luminous without turning the display into a light source.
+  color *= 0.62 / max(0.62, displayPeak);
   outColor = vec4(color, 1.0);
 }
 `;

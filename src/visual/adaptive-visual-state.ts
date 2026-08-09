@@ -18,8 +18,8 @@ export const adaptiveSceneConfigurations = {
   turbulence: { decay: 0.935, warp: 0.032 },
   gathering: { decay: 0.955, warp: 0.018 },
   coherence: { decay: 0.97, warp: 0.01 },
-  release: { decay: 0.978, warp: 0.006 },
-  radiance: { decay: 0.985, warp: 0.003 },
+  release: { decay: 0.965, warp: 0.006 },
+  radiance: { decay: 0.955, warp: 0.003 },
 } as const satisfies Record<AdaptiveScene, AdaptiveSceneConfiguration>;
 
 export type AdaptiveVisualControlFrame = {
@@ -29,9 +29,19 @@ export type AdaptiveVisualControlFrame = {
   movementEnergy: number;
   movementX: number;
   movementY: number;
+  faceConfidence: number;
+  faceCenterX: number;
+  faceCenterY: number;
+  faceScale: number;
+  headYaw: number;
+  headPitch: number;
+  headRoll: number;
   facialTension: number;
   facialWarmth: number;
   expressiveActivation: number;
+  mouthOpen: number;
+  browLift: number;
+  eyeClosure: number;
   breathPhase: number;
   breathConfidence: number;
   coherence: number;

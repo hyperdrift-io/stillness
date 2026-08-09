@@ -9,15 +9,15 @@
 
 @layer tokens {
   :root {
-    --color-void: #030407;
-    --color-depth: #080b13;
-    --color-text: #f3eee5;
-    --color-muted: #aaa79f;
-    --color-ember: #f3a44f;
-    --color-ember-bright: #ffd184;
-    --color-focus: #a7c7ff;
-    --color-panel: rgb(8 11 19 / 0.88);
-    --color-fine-border: rgb(243 238 229 / 0.16);
+    --color-void: #061a1f;
+    --color-depth: #0a252a;
+    --color-text: #d8d5bf;
+    --color-muted: #93a5a1;
+    --color-ember: #6e552f;
+    --color-ember-bright: #b08a52;
+    --color-focus: #6b999d;
+    --color-panel: rgb(6 26 31 / 0.9);
+    --color-fine-border: rgb(216 213 191 / 0.16);
     --space-xs: clamp(0.5rem, 1vw, 0.75rem);
     --space-s: clamp(0.75rem, 1.5vw, 1rem);
     --space-m: clamp(1rem, 2vw, 1.5rem);
@@ -40,8 +40,8 @@
     overflow: hidden;
     color: var(--color-text);
     background:
-      radial-gradient(circle at 50% 42%, rgb(255 183 102 / 0.12), transparent 31rem),
-      radial-gradient(circle at 50% 100%, rgb(86 101 190 / 0.13), transparent 34rem),
+      radial-gradient(circle at 50% 42%, rgb(176 138 82 / 0.1), transparent 31rem),
+      radial-gradient(circle at 50% 100%, rgb(31 89 99 / 0.16), transparent 34rem),
       var(--color-void);
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -68,6 +68,7 @@
   section.entry-panel {
     position: absolute;
     inset: 0;
+    z-index: 1;
     display: grid;
     place-items: center;
     padding: max(var(--space-l), env(safe-area-inset-top)) var(--space-l) max(var(--space-l), env(safe-area-inset-bottom));
@@ -75,28 +76,31 @@
 }
 
 @layer components {
-  .entry-presence {
-    position: absolute;
-    inline-size: min(76vmin, 40rem);
-    aspect-ratio: 1;
-    border-radius: 50%;
-    background:
-      radial-gradient(circle at 50% 50%, rgb(255 246 220 / 0.92) 0 0.22%, transparent 0.9%),
-      radial-gradient(circle at 50% 50%, rgb(255 173 82 / 0.34), transparent 6%),
-      radial-gradient(circle at 50% 50%, rgb(181 67 35 / 0.12), transparent 28%),
-      conic-gradient(from 30deg, transparent, rgb(242 128 48 / 0.12), transparent 34%, rgb(107 47 91 / 0.1), transparent 70%);
-    filter: blur(0.2px) drop-shadow(0 0 5rem rgb(239 123 52 / 0.18));
-    opacity: 0.58;
-    animation: breathe 8s ease-in-out infinite alternate;
-    z-index: -1;
-  }
   .entry-copy {
+    position: relative;
+    z-index: 0;
+    isolation: isolate;
     display: grid;
     justify-items: center;
-    max-inline-size: 38rem;
-    gap: var(--space-s);
+    max-inline-size: 42rem;
+    gap: var(--space-m);
     text-align: center;
     text-wrap: balance;
+    text-shadow: 0 0 2.5rem rgb(3 16 20 / 0.96);
+  }
+  .entry-copy::before {
+    position: absolute;
+    z-index: -1;
+    inset: clamp(-5rem, -7vw, -3rem) clamp(-7rem, -10vw, -3rem);
+    content: "";
+    background: radial-gradient(
+      ellipse,
+      rgb(3 17 21 / 0.94) 0%,
+      rgb(3 17 21 / 0.8) 42%,
+      rgb(3 17 21 / 0.38) 64%,
+      transparent 78%
+    );
+    pointer-events: none;
   }
   .recovery-message {
     display: grid;
@@ -112,7 +116,7 @@
   }
   .recovery-message p { color: var(--color-muted); }
   .entry-copy h1 {
-    max-inline-size: 8ch;
+    max-inline-size: 10ch;
     font-family: Georgia, "Times New Roman", serif;
     font-size: var(--text-hero);
     font-weight: 400;
@@ -135,14 +139,6 @@
     color: var(--color-muted);
     font-size: var(--text-small);
   }
-  .entry-options {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--space-s);
-    padding: 0;
-    border: 0;
-  }
   .entry-actions {
     display: flex;
     flex-wrap: wrap;
@@ -151,52 +147,10 @@
     gap: var(--space-xs);
     margin-block-start: var(--space-s);
   }
-  .entry-options legend {
-    inline-size: 100%;
-    margin-block-end: var(--space-xs);
-    color: var(--color-muted);
-    font-size: var(--text-signal);
-    font-weight: 650;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
-  .mode-choice {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-s);
-    min-block-size: 2.75rem;
-    padding: 0.5rem var(--space-s);
-    border: 1px solid var(--color-fine-border);
-    border-radius: 999px;
-    color: var(--color-text);
-    background: rgb(3 4 7 / 0.42);
-    cursor: pointer;
-  }
-  .guided-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
-    min-block-size: 3.25rem;
-    padding-inline: var(--space-s);
-    border-radius: 999px;
-    color: rgb(243 238 229 / 0.68);
-    font-size: var(--text-small);
-    cursor: pointer;
-  }
-  .guided-toggle input {
-    inline-size: 1rem;
-    block-size: 1rem;
-    accent-color: var(--color-ember-bright);
-  }
-  .mode-choice input {
-    inline-size: 1.05rem;
-    block-size: 1.05rem;
-    accent-color: var(--color-ember-bright);
-  }
   p.mode-note,
   p.session-note {
     max-inline-size: 28rem;
-    color: rgb(170 167 159 / 0.76);
+    color: var(--color-muted);
     font-size: var(--text-small);
     line-height: 1.55;
   }
@@ -209,9 +163,9 @@
     min-inline-size: 12rem;
     min-block-size: 3.35rem;
     padding: var(--space-s) clamp(1.75rem, 4vw, 2.75rem);
-    border: 1px solid rgb(255 209 132 / 0.7);
+    border: 1px solid rgb(216 213 191 / 0.5);
     border-radius: 999px;
-    color: #171008;
+    color: #102126;
     background: var(--color-ember-bright);
     font-weight: 650;
     letter-spacing: 0.04em;
@@ -219,8 +173,8 @@
     transition: transform 180ms var(--ease-calm), box-shadow 300ms var(--ease-calm), background 300ms var(--ease-calm);
   }
   button.primary:hover {
-    background: #ffe0a2;
-    box-shadow: 0 0 3rem rgb(243 164 79 / 0.34);
+    background: #c2a46f;
+    box-shadow: 0 0 2rem rgb(107 153 157 / 0.2);
   }
   button.primary:active { transform: scale(0.97); }
   button.primary:disabled { cursor: wait; opacity: 0.72; }
@@ -442,6 +396,18 @@
     font-size: var(--text-signal);
     line-height: 1.4;
   }
+  dialog.session-menu .camera-reconnect {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.65rem 0.8rem;
+    border-inline-start: 2px solid var(--color-focus);
+    background: rgb(107 153 157 / 0.08);
+  }
+  dialog.session-menu .camera-reconnect button.menu-action {
+    min-block-size: 2rem;
+    color: var(--color-focus);
+    font-size: var(--text-small);
+  }
   dialog.session-menu section {
     display: grid;
     gap: var(--space-xs);
@@ -496,28 +462,17 @@
 }
 
 @layer states {
-  @keyframes breathe {
-    from { transform: scale(0.94) rotate(-2deg); opacity: 0.58; }
-    to { transform: scale(1.05) rotate(2deg); opacity: 0.82; }
-  }
   @keyframes guidance-enter {
     from { opacity: 0; transform: translate(-50%, -46%); }
     to { opacity: 1; transform: translate(-50%, -50%); }
   }
+  .experience[data-mode="ready"] .light-field { opacity: 0.78; }
   .experience[data-mode="active"] .light-field { opacity: 1; }
-  .experience[data-mode="starting"] .light-field { opacity: 0.28; }
+  .experience[data-mode="starting"] .light-field { opacity: 1; }
   .experience[data-mode="calibrating"] .light-field { opacity: 1; }
-  .experience[data-mode="starting"] .entry-presence,
-  .experience[data-mode="calibrating"] .entry-presence {
-    opacity: 0.28;
-  }
   .experience[data-mode="starting"] .entry-copy,
   .experience[data-mode="calibrating"] .entry-copy {
-    padding: var(--space-m);
-    border: 1px solid rgb(243 238 229 / 0.08);
-    border-radius: 1.5rem;
-    background: rgb(3 4 7 / 0.34);
-    backdrop-filter: blur(1rem);
+    opacity: 0.88;
   }
   .experience[data-mode="active"] section.entry-panel {
     opacity: 0;

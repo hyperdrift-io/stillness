@@ -28,24 +28,20 @@ const still: ResonanceState = {
   space: 0.98,
 };
 
-test('mapAudioParameters keeps the audio graph within safe ranges', () => {
+test('mapAudioParameters keeps the vowel voice within safe ranges', () => {
   const parameters = mapAudioParameters({ ...active, audioEnergy: 4, pulse: Number.NaN });
-  assert.ok(parameters.masterGain >= 0 && parameters.masterGain <= 0.18);
-  assert.ok(parameters.droneGain >= 0 && parameters.droneGain <= 0.16);
-  assert.ok(parameters.textureGain >= 0 && parameters.textureGain <= 0.08);
-  assert.ok(parameters.filterHz >= 180 && parameters.filterHz <= 2_600);
-  assert.ok(parameters.pulseHz >= 0.04 && parameters.pulseHz <= 0.4);
-  assert.ok(parameters.delayMix >= 0 && parameters.delayMix <= 0.35);
+  assert.ok(parameters.delayMix >= 0.08 && parameters.delayMix <= 0.44);
+  assert.ok(parameters.vocalGain >= 0.035 && parameters.vocalGain <= 0.215);
+  assert.ok(parameters.vocalPitchHz >= 73.42 && parameters.vocalPitchHz <= 82.42);
+  assert.ok(parameters.formantsHz.every(Number.isFinite));
 });
 
-test('settling removes texture and slows the shared pulse', () => {
+test('settling opens the vowel and its delay', () => {
   const beginning = mapAudioParameters(active);
   const ending = mapAudioParameters(still);
-  assert.ok(ending.masterGain < beginning.masterGain);
-  assert.ok(ending.textureGain < beginning.textureGain);
-  assert.ok(ending.filterHz < beginning.filterHz);
-  assert.ok(ending.pulseHz < beginning.pulseHz);
   assert.ok(ending.delayMix > beginning.delayMix);
+  assert.ok(ending.vocalGain > beginning.vocalGain);
+  assert.notDeepEqual(ending.formantsHz, beginning.formantsHz);
 });
 
 test('audible gain target fades to silence without reaching digital zero', () => {

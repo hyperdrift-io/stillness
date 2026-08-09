@@ -103,7 +103,7 @@ export class SoulMirrorRenderer {
     const previousScene = this.target?.scene;
     this.target = isAdaptiveVisualFrame(frame)
       ? frame
-      : this.mapLegacyFrame(frame);
+      : frame.adaptive ?? this.mapLegacyFrame(frame);
     if (previousScene !== this.target.scene) this.variationStartedAt = performance.now();
     this.pushTargetToCore();
   }
@@ -340,6 +340,13 @@ export class SoulMirrorRenderer {
       movementEnergy: clamp01(Math.max(relief.motion, mirror.motion)),
       movementX: 0,
       movementY: 0,
+      faceConfidence: clamp01(mirror.confidence),
+      faceCenterX: topology ? clamp01((topology.centerX + 1) * 0.5) : 0.5,
+      faceCenterY: topology ? clamp01((topology.centerY + 1) * 0.5) : 0.5,
+      faceScale: topology ? clamp01(topology.scale * 0.5) : 0,
+      headYaw: topology ? clampSigned(topology.yaw) : 0,
+      headPitch: topology ? clampSigned(topology.pitch) : 0,
+      headRoll: topology ? clampSigned(topology.roll) : 0,
       facialTension: clamp01(expression.browTension),
       facialWarmth: clamp01(
         clamp01(expression.mouthSmile) * 0.65 + clamp01(relief.softness, 0.5) * 0.35,
@@ -350,6 +357,9 @@ export class SoulMirrorRenderer {
         expression.activity,
         expression.mouthOpen,
       )),
+      mouthOpen: clamp01(expression.mouthOpen),
+      browLift: clamp01(expression.browLift),
+      eyeClosure: clamp01(expression.eyeClosure),
       breathPhase: 0,
       breathConfidence: 0,
       coherence,

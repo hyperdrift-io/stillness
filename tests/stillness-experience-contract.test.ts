@@ -6,13 +6,12 @@ async function read(path: string): Promise<string> {
   return readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 }
 
-test('landing explains sensing, modes, sound, and session adjustment', async () => {
+test('landing describes the private responsive mirror', async () => {
   const source = await read('src/experience/stillness-experience.tsx');
 
-  assert.match(source, /Guide me into stillness/);
-  assert.match(source, /uninterrupted Pure session/);
-  assert.match(source, /Soothing sound begins/);
-  assert.match(source, /Press.*\?.*anytime/s);
+  assert.match(source, /Take a minute back/);
+  assert.match(source, /private mirror that moves with you/);
+  assert.match(source, /Camera stays on this device/);
 });
 
 test('landing states the exact signal privacy boundary before local aggregate calibration', async () => {
@@ -32,7 +31,7 @@ test('active experience renders guidance, menu, and a touch menu trigger', async
   assert.match(source, /aria-label="Adjust session"/);
 });
 
-test('begin wires telemetry and applies camera and sound preferences in gesture-safe order', async () => {
+test('begin wires telemetry and applies camera and vocal preferences in gesture-safe order', async () => {
   const source = await read('src/experience/stillness-experience.tsx');
 
   assert.match(source, /onTelemetry:\s*\(nextTelemetry\) =>/);
@@ -40,7 +39,7 @@ test('begin wires telemetry and applies camera and sound preferences in gesture-
   assert.match(source, /guidancePolicyRef\.current\.evaluate\(/);
   assert.match(
     source,
-    /if \(!preferences\.camera\)[\s\S]*controller\.setCameraEnabled\(false\)[\s\S]*await controller\.start\(\)[\s\S]*controller\.setSoundEnabled\(preferences\.sound\)/,
+    /if \(!preferences\.camera\)[\s\S]*controller\.setCameraEnabled\(false\)[\s\S]*await controller\.start\(\)[\s\S]*controller\.setVocalAudible\(preferences\.vocal\)/,
   );
   assert.doesNotMatch(source, /setCameraEnabled\(true\)[\s\S]*controller\.start\(\)/);
 });
@@ -70,12 +69,12 @@ test('shortcuts ignore editable targets and non-shift modifiers while escape clo
 test('live controls update preferences, resources, and guidance visibility', async () => {
   const source = await read('src/experience/stillness-experience.tsx');
 
-  assert.match(source, /controller\?\.setSoundEnabled\(enabled\)/);
+  assert.match(source, /controller\?\.setVocalAudible\(nextEnabled\)/);
   assert.match(source, /transitionsRef\.current\.owns\(token\)[\s\S]*setAudioAvailable\(available\)/);
   assert.match(source, /controllerRef\.current\?\.setCameraEnabled\(enabled\)/);
   assert.match(source, /guidancePolicyRef\.current\.reset\(\)/);
   assert.match(source, /setCue\(null\)/);
-  assert.match(source, /setPreferences\(\(current\) => \(\{ \.\.\.current, \[preference\]: enabled \}\)\)/);
+  assert.match(source, /setPreferences\(\(current\) => \(\{ \.\.\.current, \[preference\]: nextEnabled \}\)\)/);
 });
 
 test('the signals shortcut reveals the menu when closed', async () => {

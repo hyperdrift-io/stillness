@@ -80,8 +80,18 @@ const sceneUniformNames = [
 const faceUniformNames = [
   'uResolution',
   'uTime',
+  'uFaceCenter',
+  'uFaceScale',
+  'uFaceConfidence',
+  'uHeadYaw',
+  'uHeadPitch',
+  'uHeadRoll',
   'uFacialTension',
   'uFacialWarmth',
+  'uExpressiveActivation',
+  'uMouthOpen',
+  'uBrowLift',
+  'uEyeClosure',
   'uBreathScale',
   'uReducedMotion',
   'uVisualIntensity',
@@ -124,9 +134,19 @@ const initialControlFrame: AdaptiveVisualControlFrame = {
   movementEnergy: 0,
   movementX: 0,
   movementY: 0,
+  faceConfidence: 0,
+  faceCenterX: 0.5,
+  faceCenterY: 0.5,
+  faceScale: 0,
+  headYaw: 0,
+  headPitch: 0,
+  headRoll: 0,
   facialTension: 0,
   facialWarmth: 0,
   expressiveActivation: 0,
+  mouthOpen: 0,
+  browLift: 0,
+  eyeClosure: 0,
   breathPhase: 0,
   breathConfidence: 0,
   coherence: 0,
@@ -665,8 +685,25 @@ export class AdaptiveVisualCore {
     this.enableAdditiveBlending(gl);
     gl.uniform2f(uniforms.uResolution, resources.width, resources.height);
     gl.uniform1f(uniforms.uTime, shaderTime);
+    gl.uniform2f(
+      uniforms.uFaceCenter,
+      clamp(frame.faceCenterX, 0, 1),
+      clamp(frame.faceCenterY, 0, 1),
+    );
+    gl.uniform1f(uniforms.uFaceScale, clamp(frame.faceScale, 0, 1));
+    gl.uniform1f(uniforms.uFaceConfidence, clamp(frame.faceConfidence, 0, 1));
+    gl.uniform1f(uniforms.uHeadYaw, clamp(frame.headYaw, -1, 1));
+    gl.uniform1f(uniforms.uHeadPitch, clamp(frame.headPitch, -1, 1));
+    gl.uniform1f(uniforms.uHeadRoll, clamp(frame.headRoll, -1, 1));
     gl.uniform1f(uniforms.uFacialTension, clamp(frame.facialTension, 0, 1));
     gl.uniform1f(uniforms.uFacialWarmth, clamp(frame.facialWarmth, 0, 1));
+    gl.uniform1f(
+      uniforms.uExpressiveActivation,
+      clamp(frame.expressiveActivation, 0, 1),
+    );
+    gl.uniform1f(uniforms.uMouthOpen, clamp(frame.mouthOpen, 0, 1));
+    gl.uniform1f(uniforms.uBrowLift, clamp(frame.browLift, 0, 1));
+    gl.uniform1f(uniforms.uEyeClosure, clamp(frame.eyeClosure, 0, 1));
     gl.uniform1f(uniforms.uBreathScale, breathScale);
     gl.uniform1f(uniforms.uReducedMotion, reducedMotion);
     gl.uniform1f(uniforms.uVisualIntensity, clamp(frame.visualIntensity, 0.75, 1.25));

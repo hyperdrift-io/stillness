@@ -88,18 +88,27 @@ function closeLandmarkers(): void {
   poseLandmarker = null;
 }
 
-async function createLandmarkers(vision: VisionFileset, delegate: Delegate): Promise<void> {
+async function createVisionFileset(task: 'face' | 'pose', delegate: Delegate): Promise<VisionFileset> {
+  const vision = await FilesetResolver.forVisionTasks(VISION_WASM_BASE, true);
+  const cacheKey = `${task}-${delegate.toLowerCase()}-${Date.now()}`;
+  vision.wasmLoaderPath = `${vision.wasmLoaderPath}?task=${cacheKey}`;
+  return vision;
+}
+
+async function createLandmarkers(delegate: Delegate): Promise<void> {
   let nextFace: FaceLandmarker | null = null;
   let nextPose: PoseLandmarker | null = null;
-  const canvas = delegate === 'GPU' ? new OffscreenCanvas(1, 1) : undefined;
+  const faceCanvas = delegate === 'GPU' ? new OffscreenCanvas(1, 1) : undefined;
+  const poseCanvas = delegate === 'GPU' ? new OffscreenCanvas(1, 1) : undefined;
 
   try {
-    nextFace = await FaceLandmarker.createFromOptions(vision, {
+    const faceVision = await createVisionFileset('face', delegate);
+    nextFace = await FaceLandmarker.createFromOptions(faceVision, {
       baseOptions: {
         modelAssetPath: FACE_LANDMARKER_MODEL_URL,
         delegate,
       },
-      ...(canvas ? { canvas } : {}),
+      ...(faceCanvas ? { canvas: faceCanvas } : {}),
       runningMode: 'VIDEO',
       numFaces: 1,
       minFaceDetectionConfidence: MIN_CONFIDENCE,
@@ -108,12 +117,13 @@ async function createLandmarkers(vision: VisionFileset, delegate: Delegate): Pro
       outputFaceBlendshapes: true,
       outputFacialTransformationMatrixes: true,
     });
-    nextPose = await PoseLandmarker.createFromOptions(vision, {
+    const poseVision = await createVisionFileset('pose', delegate);
+    nextPose = await PoseLandmarker.createFromOptions(poseVision, {
       baseOptions: {
         modelAssetPath: POSE_LANDMARKER_MODEL_URL,
         delegate,
       },
-      ...(canvas ? { canvas } : {}),
+      ...(poseCanvas ? { canvas: poseCanvas } : {}),
       runningMode: 'VIDEO',
       numPoses: 1,
       minPoseDetectionConfidence: MIN_CONFIDENCE,
@@ -133,12 +143,11 @@ async function createLandmarkers(vision: VisionFileset, delegate: Delegate): Pro
 
 async function initialize(): Promise<void> {
   closeLandmarkers();
-  const vision = await FilesetResolver.forVisionTasks(VISION_WASM_BASE);
   try {
-    await createLandmarkers(vision, 'GPU');
+    await createLandmarkers('GPU');
   } catch {
     closeLandmarkers();
-    await createLandmarkers(vision, 'CPU');
+    await createLandmarkers('CPU');
   }
 }
 

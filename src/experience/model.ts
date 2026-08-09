@@ -1,5 +1,6 @@
 import type { ResonanceState } from '../resonance/resonance.ts';
 import type { MirrorSignal } from '../sensing/mirror-signal.ts';
+import type { AdaptiveVisualControlFrame } from '../visual/adaptive-visual-state.ts';
 
 export const regulationPhases = [
   'capture',
@@ -37,6 +38,7 @@ export type SessionRenderFrame = {
   resonance: ResonanceState;
   relief: ReliefState;
   mirror: MirrorSignal;
+  adaptive?: AdaptiveVisualControlFrame;
 };
 
 export const safePrior: StateEstimate = {

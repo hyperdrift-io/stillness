@@ -169,7 +169,7 @@ test('SessionController suspends, resumes, and disposes every resource', async (
 test('SessionController forwards sound preference and returns audio availability', async () => {
   const { controller, calls } = createHarness(0, { soundEnabledResult: false });
 
-  assert.equal(await controller.setSoundEnabled(false), false);
+  assert.equal(await controller.setVocalAudible(false), false);
   assert.ok(calls.includes('audio:audible:false'));
 });
 

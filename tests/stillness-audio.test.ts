@@ -315,7 +315,7 @@ test('adaptive updates remain current while sound is muted', async () => {
     assert.equal(targetEvents(master).at(-1)?.value, 0.0001);
 
     await audio.setAudible(true);
-    assert.equal(targetEvents(master).at(-1)?.value, mapAudioParameters(activeState).masterGain);
+    assert.equal(targetEvents(master).at(-1)?.value, 0.62);
   });
 });
 

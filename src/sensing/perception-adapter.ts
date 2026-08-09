@@ -4,6 +4,7 @@ import {
 } from './perception-signal.ts';
 import type { PerceptionModulationFrame } from './perception-worker-protocol.ts';
 import {
+  PerceptionFrameAnalysisError,
   PerceptionFrameSupersededError,
   PerceptionWorkerClient,
 } from './perception-worker-client.ts';
@@ -11,6 +12,9 @@ import {
 const INITIAL_ANALYSIS_INTERVAL_MS = 66;
 const MIN_ANALYSIS_INTERVAL_MS = 42;
 const MAX_ANALYSIS_INTERVAL_MS = 66;
+const MAX_CONSECUTIVE_ANALYSIS_FAILURES = 3;
+const WORKER_RESTART_BASE_DELAY_MS = 400;
+const WORKER_RESTART_MAX_DELAY_MS = 5_000;
 
 function cloneSnapshot(snapshot: PerceptionSnapshot): PerceptionSnapshot {
   return {
@@ -30,6 +34,7 @@ function cloneSnapshot(snapshot: PerceptionSnapshot): PerceptionSnapshot {
 
 export class PerceptionAdapter {
   private stream: MediaStream | null = null;
+  private activeVideoTrack: MediaStreamTrack | null = null;
   private video: HTMLVideoElement | null = null;
   private pendingStream: MediaStream | null = null;
   private pendingVideo: HTMLVideoElement | null = null;
@@ -45,10 +50,19 @@ export class PerceptionAdapter {
   private videoFrameHandle: number | null = null;
   private animationFrameHandle: number | null = null;
   private visibilityListening = false;
+  private availabilityListener: ((available: boolean) => void) | null = null;
+  private consecutiveAnalysisFailures = 0;
+  private workerRestartAttempts = 0;
+  private workerRestarting = false;
+  private workerRestartTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+
+  setAvailabilityListener(listener: ((available: boolean) => void) | null): void {
+    this.availabilityListener = listener;
+  }
 
   start(): Promise<boolean> {
     if (this.starting) return this.starting;
-    if (this.stream && this.workerClient?.isLive()) return Promise.resolve(true);
+    if (this.stream && this.video) return Promise.resolve(true);
     if (this.stream || this.video || this.workerClient) this.stop();
 
     let starting: Promise<boolean>;
@@ -73,6 +87,10 @@ export class PerceptionAdapter {
     this.generation += 1;
     this.starting = null;
     this.cancelScheduledFrame();
+    if (this.workerRestartTimer !== null) {
+      globalThis.clearTimeout(this.workerRestartTimer);
+      this.workerRestartTimer = null;
+    }
     if (this.visibilityListening) {
       document.removeEventListener('visibilitychange', this.handleVisibilityChange);
       this.visibilityListening = false;
@@ -80,6 +98,8 @@ export class PerceptionAdapter {
 
     this.workerClient?.dispose();
     this.workerClient = null;
+    this.activeVideoTrack?.removeEventListener('ended', this.handleVideoTrackEnded);
+    this.activeVideoTrack = null;
     this.latestModulation?.bitmap.close();
     this.latestModulation = null;
     const pendingStream = this.pendingStream;
@@ -94,6 +114,9 @@ export class PerceptionAdapter {
     this.lastCaptureTime = 0;
     this.analysisIntervalMs = INITIAL_ANALYSIS_INTERVAL_MS;
     this.rollingAnalysisDurationMs = INITIAL_ANALYSIS_INTERVAL_MS;
+    this.consecutiveAnalysisFailures = 0;
+    this.workerRestartAttempts = 0;
+    this.workerRestarting = false;
     this.latest = cloneSnapshot(initialPerceptionSnapshot);
   }
 
@@ -102,9 +125,7 @@ export class PerceptionAdapter {
 
     const generation = this.generation + 1;
     this.generation = generation;
-    const workerClient = new PerceptionWorkerClient(() => {
-      if (this.generation === generation && this.workerClient === workerClient) this.stop();
-    });
+    const workerClient = this.createWorkerClient(generation);
     this.workerClient = workerClient;
     let startupStream: MediaStream | null = null;
     let startupVideo: HTMLVideoElement | null = null;
@@ -143,27 +164,19 @@ export class PerceptionAdapter {
         return false;
       }
 
-      await workerClient.start();
-      if (
-        this.generation !== generation ||
-        this.workerClient !== workerClient ||
-        !workerClient.isLive() ||
-        this.pendingStream !== stream ||
-        this.pendingVideo !== video
-      ) {
-        this.releaseStartupMedia(startupStream, startupVideo);
-        workerClient.dispose();
-        return false;
-      }
-
       this.pendingStream = null;
       this.pendingVideo = null;
       this.stream = stream;
       this.video = video;
+      this.activeVideoTrack = stream.getVideoTracks()[0] ?? null;
+      this.activeVideoTrack?.addEventListener('ended', this.handleVideoTrackEnded);
       this.lastCaptureTime = 0;
+      this.consecutiveAnalysisFailures = 0;
+      this.workerRestartAttempts = 0;
       document.addEventListener('visibilitychange', this.handleVisibilityChange);
       this.visibilityListening = true;
-      if (!document.hidden) this.scheduleFrame(generation);
+      this.availabilityListener?.(true);
+      this.startWorkerClient(generation, workerClient);
       return true;
     } catch {
       this.releaseStartupMedia(startupStream, startupVideo);
@@ -192,7 +205,12 @@ export class PerceptionAdapter {
 
   private scheduleFrame(generation: number): void {
     const video = this.video;
-    if (!video || document.hidden || this.generation !== generation) return;
+    if (
+      !video
+      || !this.workerClient?.isLive()
+      || document.hidden
+      || this.generation !== generation
+    ) return;
     if (typeof video.requestVideoFrameCallback === 'function') {
       this.videoFrameHandle = video.requestVideoFrameCallback((now) => {
         this.videoFrameHandle = null;
@@ -215,6 +233,7 @@ export class PerceptionAdapter {
     if (
       !video ||
       this.capturePending ||
+      this.workerRestarting ||
       now - this.lastCaptureTime < this.analysisIntervalMs ||
       video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
     ) {
@@ -227,7 +246,11 @@ export class PerceptionAdapter {
       .then((frame) => {
         if (this.generation === generation) this.capturePending = false;
         const workerClient = this.workerClient;
-        if (this.generation !== generation || !workerClient || document.hidden) {
+        if (
+          this.generation !== generation
+          || !workerClient?.isLive()
+          || document.hidden
+        ) {
           frame.close();
           return;
         }
@@ -247,6 +270,8 @@ export class PerceptionAdapter {
               MAX_ANALYSIS_INTERVAL_MS,
               Math.max(MIN_ANALYSIS_INTERVAL_MS, this.rollingAnalysisDurationMs * 1.2),
             );
+            this.consecutiveAnalysisFailures = 0;
+            this.workerRestartAttempts = 0;
             this.latest = snapshot;
             this.latestModulation?.bitmap.close();
             this.latestModulation = {
@@ -256,7 +281,13 @@ export class PerceptionAdapter {
           })
           .catch((error: unknown) => {
             if (error instanceof PerceptionFrameSupersededError) return;
-            if (this.generation === generation && this.workerClient === workerClient) this.stop();
+            if (this.generation !== generation || this.workerClient !== workerClient) return;
+            if (error instanceof PerceptionFrameAnalysisError) {
+              this.consecutiveAnalysisFailures += 1;
+              if (this.consecutiveAnalysisFailures < MAX_CONSECUTIVE_ANALYSIS_FAILURES) return;
+              console.error('Relief face sensing skipped three consecutive frames; restarting.', error);
+            }
+            this.restartWorker(generation, workerClient);
           });
       })
       .catch(() => {
@@ -274,10 +305,88 @@ export class PerceptionAdapter {
     this.animationFrameHandle = null;
   }
 
+  private createWorkerClient(generation: number): PerceptionWorkerClient {
+    let workerClient!: PerceptionWorkerClient;
+    workerClient = new PerceptionWorkerClient((error) => {
+      if (this.generation !== generation || this.workerClient !== workerClient) return;
+      if (!this.stream || !this.video) return;
+      console.error('Relief face sensing worker stopped; retrying.', error);
+      this.restartWorker(generation, workerClient);
+    });
+    return workerClient;
+  }
+
+  private startWorkerClient(
+    generation: number,
+    workerClient: PerceptionWorkerClient,
+  ): void {
+    this.workerRestarting = true;
+    void workerClient.start()
+      .then(() => {
+        if (
+          this.generation !== generation
+          || this.workerClient !== workerClient
+          || !this.stream
+          || !this.video
+        ) {
+          workerClient.dispose();
+          return;
+        }
+        this.workerRestarting = false;
+        this.workerRestartAttempts = 0;
+        this.consecutiveAnalysisFailures = 0;
+        this.lastCaptureTime = 0;
+        if (!document.hidden) this.scheduleFrame(generation);
+        this.availabilityListener?.(true);
+      })
+      .catch(() => {
+        if (this.generation !== generation || this.workerClient !== workerClient) return;
+        this.workerRestarting = false;
+        this.restartWorker(generation, workerClient);
+      });
+  }
+
+  private restartWorker(generation: number, failedWorker: PerceptionWorkerClient): void {
+    if (
+      this.generation !== generation
+      || this.workerClient !== failedWorker
+      || this.workerRestarting
+    ) return;
+    this.workerRestartAttempts += 1;
+    this.workerRestarting = true;
+    this.capturePending = false;
+    this.cancelScheduledFrame();
+    failedWorker.dispose();
+    const delayMs = Math.min(
+      WORKER_RESTART_MAX_DELAY_MS,
+      WORKER_RESTART_BASE_DELAY_MS * (2 ** Math.min(4, this.workerRestartAttempts - 1)),
+    );
+    this.workerRestartTimer = globalThis.setTimeout(() => {
+      this.workerRestartTimer = null;
+      if (
+        this.generation !== generation
+        || this.workerClient !== failedWorker
+        || !this.stream
+        || !this.video
+      ) return;
+
+      const replacement = this.createWorkerClient(generation);
+      this.workerClient = replacement;
+      this.workerRestarting = false;
+      this.startWorkerClient(generation, replacement);
+    }, delayMs);
+  }
+
   private handleVisibilityChange = (): void => {
     this.cancelScheduledFrame();
     if (document.hidden) return;
     this.lastCaptureTime = 0;
-    this.scheduleFrame(this.generation);
+    if (this.workerClient?.isLive()) this.scheduleFrame(this.generation);
+  };
+
+  private handleVideoTrackEnded = (): void => {
+    const wasAvailable = this.stream !== null;
+    this.stop();
+    if (wasAvailable) this.availabilityListener?.(false);
   };
 }

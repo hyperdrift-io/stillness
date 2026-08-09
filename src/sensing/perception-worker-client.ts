@@ -13,6 +13,10 @@ export class PerceptionFrameSupersededError extends Error {
   override readonly name = 'PerceptionFrameSupersededError';
 }
 
+export class PerceptionFrameAnalysisError extends Error {
+  override readonly name = 'PerceptionFrameAnalysisError';
+}
+
 export class PerceptionWorkerFatalError extends Error {
   override readonly name = 'PerceptionWorkerFatalError';
 }
@@ -197,6 +201,15 @@ export class PerceptionWorkerClient {
     }
 
     if (message.type === 'error') {
+      if (message.requestId !== undefined) {
+        const active = this.active;
+        if (active?.requestId === message.requestId) {
+          this.active = null;
+          active.reject(new PerceptionFrameAnalysisError(message.message));
+          this.dispatchQueued();
+        }
+        return;
+      }
       this.fail(new PerceptionWorkerFatalError(message.message));
       return;
     }

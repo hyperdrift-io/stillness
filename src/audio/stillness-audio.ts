@@ -2,50 +2,71 @@ import { clamp01 } from '../experience/model.ts';
 import type { ResonanceState } from '../resonance/resonance.ts';
 
 export type AudioParameters = {
-  masterGain: number;
-  droneGain: number;
-  textureGain: number;
-  filterHz: number;
-  pulseHz: number;
   delayMix: number;
+  vocalGain: number;
+  vocalPitchHz: number;
+  formantsHz: readonly [number, number, number];
 };
 
 const SILENT_GAIN = 0.0001;
-const INITIAL_ADAPTIVE_MASTER_GAIN = 0.16;
+const VOCAL_MASTER_GAIN = 0.62;
+
+const VOWEL_FORMANTS = {
+  closed: [300, 870, 2_240],
+  open: [730, 1_090, 2_440],
+  clear: [270, 2_290, 3_010],
+} as const;
+
+function interpolate(from: number, to: number, amount: number): number {
+  return from + (to - from) * amount;
+}
+
+function formantsForVowel(position: number): readonly [number, number, number] {
+  const vowel = clamp01(position);
+  const from = vowel < 0.5 ? VOWEL_FORMANTS.closed : VOWEL_FORMANTS.open;
+  const to = vowel < 0.5 ? VOWEL_FORMANTS.open : VOWEL_FORMANTS.clear;
+  const amount = vowel < 0.5 ? vowel * 2 : (vowel - 0.5) * 2;
+  return [
+    interpolate(from[0], to[0], amount),
+    interpolate(from[1], to[1], amount),
+    interpolate(from[2], to[2], amount),
+  ];
+}
 
 export function audibleGainTarget(audible: boolean, adaptiveGain: number): number {
   return audible && Number.isFinite(adaptiveGain) ? adaptiveGain : SILENT_GAIN;
 }
 
 export function mapAudioParameters(state: ResonanceState): AudioParameters {
-  const energy = clamp01(state.audioEnergy);
-  const turbulence = clamp01(state.turbulence);
-  const pulse = clamp01(state.pulse, 0.5);
   const space = clamp01(state.space);
+  const vocalArrival = clamp01((space - 0.48) / 0.52);
+  const vowelPosition = clamp01(space * 0.72 + state.pulse * 0.28);
 
   return {
-    masterGain: 0.055 + energy * 0.16 + space * 0.04,
-    droneGain: 0.07 + energy * 0.13 + space * 0.05,
-    textureGain: 0.006 + turbulence * energy * 0.06,
-    filterHz: 220 + energy * 1_450 + turbulence * 620,
-    pulseHz: 0.035 + pulse * 0.28,
     delayMix: 0.08 + space * 0.36,
+    vocalGain: 0.035 + vocalArrival * vocalArrival * 0.18,
+    vocalPitchHz: 73.42 + clamp01(state.warmth) * 9,
+    formantsHz: formantsForVowel(vowelPosition),
   };
 }
 
 export class StillnessAudio {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
-  private droneGain: GainNode | null = null;
-  private textureGain: GainNode | null = null;
-  private filter: BiquadFilterNode | null = null;
   private delayGain: GainNode | null = null;
   private delayFeedback: GainNode | null = null;
-  private pulseGain: GainNode | null = null;
-  private pulseOscillator: OscillatorNode | null = null;
+  private vocalGain: GainNode | null = null;
+  private vocalOscillators: OscillatorNode[] = [];
+  private vocalFormants: BiquadFilterNode[] = [];
   private sources: AudioScheduledSourceNode[] = [];
-  private adaptiveMasterGain = INITIAL_ADAPTIVE_MASTER_GAIN;
-  private audible = true;
+  private adaptiveVocalGain = 0.035;
+  private audible: boolean;
+  private vocalEnabled: boolean;
+
+  constructor(initiallyAudible = false, initiallyVocal = false) {
+    this.audible = initiallyAudible;
+    this.vocalEnabled = initiallyVocal;
+  }
 
   async start(): Promise<void> {
     if (this.context) {
@@ -53,104 +74,112 @@ export class StillnessAudio {
       return;
     }
 
-    this.audible = true;
-    this.adaptiveMasterGain = INITIAL_ADAPTIVE_MASTER_GAIN;
+    this.adaptiveVocalGain = 0.035;
     const context = new AudioContext({ latencyHint: 'playback' });
     const master = context.createGain();
-    const droneGain = context.createGain();
-    const textureGain = context.createGain();
-    const filter = context.createBiquadFilter();
     const delay = context.createDelay(2.5);
     const delayGain = context.createGain();
     const delayFeedback = context.createGain();
-    const pulseGain = context.createGain();
+    const vocalInput = context.createGain();
+    const vocalGain = context.createGain();
 
     master.gain.value = SILENT_GAIN;
-    droneGain.gain.value = 0.12;
-    textureGain.gain.value = 0.03;
-    filter.type = 'lowpass';
-    filter.frequency.value = 1_200;
-    filter.Q.value = 0.55;
     delay.delayTime.value = 0.72;
     delayGain.gain.value = 0.16;
     delayFeedback.gain.value = 0.22;
-    pulseGain.gain.value = 0.008;
+    vocalInput.gain.value = 0.28;
+    vocalGain.gain.value = this.vocalEnabled ? this.adaptiveVocalGain : SILENT_GAIN;
 
-    droneGain.connect(filter);
-    textureGain.connect(filter);
-    filter.connect(master);
-    filter.connect(delay);
     delay.connect(delayGain);
     delayGain.connect(master);
     delay.connect(delayFeedback);
     delayFeedback.connect(delay);
     master.connect(context.destination);
 
-    const frequencies = [55, 82.5, 110, 165, 220];
-    const oscillators = frequencies.map((frequency, index) => {
+    const vocalOscillators = [
+      { type: 'sawtooth' as OscillatorType, frequency: 73.42, gain: 0.5 },
+      { type: 'triangle' as OscillatorType, frequency: 146.84, gain: 0.22 },
+    ].map((voice) => {
       const oscillator = context.createOscillator();
-      const voice = context.createGain();
-      oscillator.type = index === 1 ? 'triangle' : 'sine';
-      oscillator.frequency.value = frequency;
-      oscillator.detune.value = index === 0 ? -4 : index === 2 ? 3 : 0;
-      voice.gain.value = [0.5, 0.22, 0.12, 0.055, 0.035][index] ?? 0.04;
-      oscillator.connect(voice);
-      voice.connect(droneGain);
+      const gain = context.createGain();
+      oscillator.type = voice.type;
+      oscillator.frequency.value = voice.frequency;
+      gain.gain.value = voice.gain;
+      oscillator.connect(gain);
+      gain.connect(vocalInput);
       oscillator.start();
       return oscillator;
     });
 
-    const noise = context.createBufferSource();
-    noise.buffer = this.createNoiseBuffer(context);
-    noise.loop = true;
-    noise.connect(textureGain);
-    noise.start();
-
-    const pulseOscillator = context.createOscillator();
-    pulseOscillator.type = 'sine';
-    pulseOscillator.frequency.value = 0.16;
-    pulseOscillator.connect(pulseGain);
-    pulseGain.connect(droneGain.gain);
-    pulseOscillator.start();
+    const formantLevels = [0.62, 0.28, 0.12];
+    const vocalFormants = VOWEL_FORMANTS.closed.map((frequency, index) => {
+      const formant = context.createBiquadFilter();
+      const formantGain = context.createGain();
+      formant.type = 'bandpass';
+      formant.frequency.value = frequency;
+      formant.Q.value = index === 0 ? 3.5 : index === 1 ? 5 : 7;
+      formantGain.gain.value = formantLevels[index] ?? 0.1;
+      vocalInput.connect(formant);
+      formant.connect(formantGain);
+      formantGain.connect(vocalGain);
+      return formant;
+    });
+    vocalGain.connect(master);
+    vocalGain.connect(delay);
 
     this.context = context;
     this.master = master;
-    this.droneGain = droneGain;
-    this.textureGain = textureGain;
-    this.filter = filter;
     this.delayGain = delayGain;
     this.delayFeedback = delayFeedback;
-    this.pulseGain = pulseGain;
-    this.pulseOscillator = pulseOscillator;
-    this.sources = [...oscillators, noise, pulseOscillator];
+    this.vocalGain = vocalGain;
+    this.vocalOscillators = vocalOscillators;
+    this.vocalFormants = vocalFormants;
+    this.sources = [...vocalOscillators];
 
     master.gain.exponentialRampToValueAtTime(
-      audibleGainTarget(this.audible, this.adaptiveMasterGain),
+      audibleGainTarget(this.audible, VOCAL_MASTER_GAIN),
       context.currentTime + 1.8,
     );
     if (context.state === 'suspended') await context.resume();
-    this.playEntryTone(context);
   }
 
   update(state: ResonanceState, _elapsedSeconds: number): void {
     const context = this.context;
     if (!context) return;
     const parameters = mapAudioParameters(state);
-    this.adaptiveMasterGain = parameters.masterGain;
+    this.adaptiveVocalGain = parameters.vocalGain;
     const now = context.currentTime;
-    this.setTarget(
-      this.master?.gain,
-      audibleGainTarget(this.audible, this.adaptiveMasterGain),
-      now,
-      1.2,
-    );
-    this.setTarget(this.droneGain?.gain, parameters.droneGain, now, 1.5);
-    this.setTarget(this.textureGain?.gain, parameters.textureGain, now, 1.8);
-    this.setTarget(this.filter?.frequency, parameters.filterHz, now, 2.2);
     this.setTarget(this.delayGain?.gain, parameters.delayMix, now, 2.5);
     this.setTarget(this.delayFeedback?.gain, 0.16 + parameters.delayMix * 0.42, now, 2.5);
-    this.setTarget(this.pulseOscillator?.frequency, parameters.pulseHz, now, 2.2);
-    this.setTarget(this.pulseGain?.gain, 0.002 + parameters.masterGain * 0.065, now, 1.8);
+    this.setTarget(
+      this.vocalGain?.gain,
+      this.vocalEnabled ? parameters.vocalGain : SILENT_GAIN,
+      now,
+      1.8,
+    );
+    this.vocalOscillators.forEach((oscillator, index) => {
+      this.setTarget(
+        oscillator.frequency,
+        parameters.vocalPitchHz * (index === 0 ? 1 : 2),
+        now,
+        1.4,
+      );
+    });
+    this.vocalFormants.forEach((formant, index) => {
+      this.setTarget(formant.frequency, parameters.formantsHz[index] ?? 800, now, 1.2);
+    });
+  }
+
+  setVocalEnabled(enabled: boolean): void {
+    this.vocalEnabled = enabled;
+    const context = this.context;
+    if (!context) return;
+    this.holdAndTarget(
+      this.vocalGain?.gain,
+      enabled ? this.adaptiveVocalGain : SILENT_GAIN,
+      context.currentTime,
+      0.18,
+    );
   }
 
   async setAudible(audible: boolean): Promise<boolean> {
@@ -163,7 +192,7 @@ export class StillnessAudio {
     this.audible = audible;
     this.holdAndTarget(
       master.gain,
-      audibleGainTarget(audible, this.adaptiveMasterGain),
+      audibleGainTarget(audible, VOCAL_MASTER_GAIN),
       context.currentTime,
       0.08,
     );
@@ -206,52 +235,11 @@ export class StillnessAudio {
     this.sources = [];
     this.context = null;
     this.master = null;
-    this.droneGain = null;
-    this.textureGain = null;
-    this.filter = null;
     this.delayGain = null;
     this.delayFeedback = null;
-    this.pulseGain = null;
-    this.pulseOscillator = null;
-  }
-
-  private createNoiseBuffer(context: AudioContext): AudioBuffer {
-    const length = Math.floor(context.sampleRate * 2);
-    const buffer = context.createBuffer(1, length, context.sampleRate);
-    const channel = buffer.getChannelData(0);
-    let previous = 0;
-    for (let index = 0; index < length; index += 1) {
-      const white = Math.random() * 2 - 1;
-      previous = previous * 0.985 + white * 0.015;
-      channel[index] = previous * 3.2;
-    }
-    return buffer;
-  }
-
-  private playEntryTone(context: AudioContext): void {
-    if (!this.audible || context.state === 'closed') return;
-    const now = context.currentTime;
-    const tone = context.createOscillator();
-    const overtone = context.createOscillator();
-    const gain = context.createGain();
-    const overtoneGain = context.createGain();
-    tone.type = 'sine';
-    overtone.type = 'triangle';
-    tone.frequency.setValueAtTime(220, now);
-    overtone.frequency.setValueAtTime(330, now);
-    gain.gain.setValueAtTime(SILENT_GAIN, now);
-    gain.gain.exponentialRampToValueAtTime(0.045, now + 0.08);
-    gain.gain.exponentialRampToValueAtTime(SILENT_GAIN, now + 1.15);
-    overtoneGain.gain.setValueAtTime(0.18, now);
-    overtoneGain.gain.exponentialRampToValueAtTime(0.02, now + 1.05);
-    tone.connect(gain);
-    overtone.connect(overtoneGain);
-    overtoneGain.connect(gain);
-    gain.connect(context.destination);
-    tone.start(now);
-    overtone.start(now + 0.02);
-    tone.stop(now + 1.2);
-    overtone.stop(now + 1.2);
+    this.vocalGain = null;
+    this.vocalOscillators = [];
+    this.vocalFormants = [];
   }
 
   private setTarget(

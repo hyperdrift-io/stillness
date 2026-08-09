@@ -39,12 +39,12 @@ test('session menu uses a labelled native dialog and every approved control', as
     /return \(\) => \{\s*closeOpenDialogAndRestoreFocus\(dialog, triggerRef\.current\);\s*\};/,
   );
 
-  for (const label of ['Guidance', 'Soothing sound', 'Live signals', 'Camera sensing']) {
+  for (const label of ['Guided mode', 'Vowel voice', 'Live signals', 'Camera sensing']) {
     assert.match(source, new RegExp(label));
   }
 
-  assert.equal(source.match(/type="checkbox"/g)?.length, 4);
-  assert.equal(source.match(/<meter/g)?.length, 4);
+  assert.equal(source.match(/type="checkbox"/g)?.length, 5);
+  assert.equal(source.match(/<meter/g)?.length, 1);
   assert.match(source, /preferences\.liveSignals \? \(/);
   assert.match(source, /Leave experience/);
   assert.doesNotMatch(source, />[^<]*%[^<]*</);
