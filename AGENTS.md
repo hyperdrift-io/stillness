@@ -1,5 +1,9 @@
 # Stillness PWA
 
+> Inherits the [Hyperdrift workspace AGENTS.md](../../AGENTS.md)
+> (`~/dev/hyperdrift/AGENTS.md`) and `meta/PHILOSOPHY.md`, including the Voice Covenant.
+> This file adds Stillness-specific context only.
+
 ## Mission
 
 Relief is a short interactive reset for moments when the user needs to recover, reload their batteries, and return stronger. The first outcome is immediate relief. The second outcome is renewed readiness.
