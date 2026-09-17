@@ -56,9 +56,9 @@ Open decisions:
 ## Commands
 
 ```bash
-pnpm dev
-pnpm run type-check
-pnpm run build
+npm run dev
+npm run type-check
+npm run build
 ```
 
 ## Prototype loop

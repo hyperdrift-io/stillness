@@ -21,8 +21,8 @@ Camera and motion observations are processed on device. Raw frames and samples a
 ## Deploy-safety checks
 
 ```bash
-pnpm run type-check
-pnpm run build
+npm run type-check
+npm run build
 ```
 
 Stillness is a prototype in discovery. Product feedback comes from the canonical production URL; automated test investment begins only when the direction is explicitly promoted to hardening.
