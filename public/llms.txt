@@ -1,0 +1,7 @@
+# Relief
+
+> Take a minute back. Relief is a private, face-driven reset: it responds to your movement and helps you come back with more room. Nothing to choose, nothing to score. It runs in the browser.
+
+## Pages
+
+- [Relief](https://stillness.hyperdrift.io/): start a reset
