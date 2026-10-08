@@ -31,14 +31,17 @@ export type BreathSignal = {
   amplitude: number;
   confidence: number;
   cycles: number;
+  /** Mean sensed cycle length over the window, or 0 before two cycles exist. */
+  intervalMs: number;
 };
 
-const emptyBreathSignal: BreathSignal = {
+export const emptyBreathSignal: BreathSignal = {
   phase: 0,
   regularity: 0,
   amplitude: 0,
   confidence: 0,
   cycles: 0,
+  intervalMs: 0,
 };
 
 function percentile(sorted: readonly number[], position: number): number {
@@ -228,7 +231,7 @@ export class BreathEstimator {
       phase = clamp01((timestampMs - this.lastPositiveCrossingMs) / meanInterval);
     }
 
-    return { phase, regularity, amplitude, confidence, cycles };
+    return { phase, regularity, amplitude, confidence, cycles, intervalMs: meanInterval };
   }
 
   private emitSignal(timestampMs: number, currentVisibility: number): BreathSignal {

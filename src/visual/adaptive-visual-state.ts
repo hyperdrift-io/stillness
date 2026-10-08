@@ -45,11 +45,12 @@ export type AdaptiveVisualControlFrame = {
   breathPhase: number;
   breathConfidence: number;
   coherence: number;
-  audioActive?: boolean;
-  audioEnergy?: number;
-  audioBass?: number;
-  audioBeat?: number;
-  audioHue?: number;
+  /** Lung fullness the light follows, 0 empty to 1 full, from the pacer. */
+  breathFullness: number;
+  /** How strongly the light follows the breath, 0..1; thins toward stillness. */
+  breathAmplitude: number;
+  /** 0 while the session is active, rising to 1 as pacing fades into stillness. */
+  stillness: number;
   palette: CameraPalette;
   topologySegments: Float32Array;
   colorInfluence: number;

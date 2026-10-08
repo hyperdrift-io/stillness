@@ -24,10 +24,10 @@ export class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErr
     if (this.state.failed) {
       return (
         <main className="recovery-message">
-          <h1>Relief can reopen.</h1>
+          <h1>Stillness can reopen.</h1>
           <p>The local test server lost the current interface module while updating.</p>
           <button className="primary" type="button" onClick={this.recover}>
-            Reopen Relief
+            Reopen Stillness
           </button>
         </main>
       );

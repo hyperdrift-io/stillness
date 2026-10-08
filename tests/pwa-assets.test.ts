@@ -42,10 +42,8 @@ test('service worker caches the shell and is registered by the client island', a
   assert.match(worker, /addEventListener\('message'/);
   assert.match(experience, /serviceWorker\.register\('\/sw\.js'\)/);
   assert.match(experience, /postMessage\(\{ type: 'CACHE_URLS', urls \}\)/);
-  for (const component of ['SessionGuidance', 'SessionMenu']) {
-    assert.match(experience, new RegExp(`import \\{ ${component} \\}`));
-    assert.match(experience, new RegExp(`<${component}`));
-  }
+  assert.match(experience, /import \{ SessionMenu \}/);
+  assert.match(experience, /<SessionMenu/);
 });
 
 test('public discovery and metadata assets are present', async () => {

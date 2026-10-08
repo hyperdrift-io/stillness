@@ -30,6 +30,7 @@ const BREATH_CONFIDENCE_THRESHOLD = 0.35;
 const RELATIVE_MOVEMENT_FLOOR = 0.04;
 const RELATIVE_TENSION_FLOOR = 0.08;
 const WEIGHT_EPSILON = 1e-6;
+const LEAD_EVIDENCE_SHARE = 0.3;
 
 type WeightedChannel = {
   value: number;
@@ -285,15 +286,20 @@ export class AdaptiveStateEngine {
       (sum, item) => sum + item.configuredWeight * item.confidence,
       0,
     );
-    let progress = this.previousProgress ?? 0;
+    const lead = clamp01(input.lead);
+    let sensedProgress = this.previousProgress ?? lead;
     if (rawEffectiveWeight > WEIGHT_EPSILON) {
-      progress = 0;
+      sensedProgress = 0;
       for (const item of Object.values(contributions)) {
         item.effectiveWeight = (item.configuredWeight * item.confidence) / rawEffectiveWeight;
-        progress += item.value * item.effectiveWeight;
+        sensedProgress += item.value * item.effectiveWeight;
       }
-      progress = clamp01(progress);
+      sensedProgress = clamp01(sensedProgress);
     }
+    // The light leads; the evidence pulls the journey a little toward what
+    // the body is actually doing, in proportion to how much we can trust it.
+    const evidenceWeight = clamp01(rawEffectiveWeight) * LEAD_EVIDENCE_SHARE;
+    const progress = clamp01(lead * (1 - evidenceWeight) + sensedProgress * evidenceWeight);
 
     this.updateTrend(
       progress,
@@ -303,10 +309,10 @@ export class AdaptiveStateEngine {
     this.updateScene(
       progress,
       frameStep,
-      rawEffectiveWeight > WEIGHT_EPSILON,
+      true,
       input.tuning.transitionSeconds,
     );
-    this.previousProgress = progress;
+    this.previousProgress = sensedProgress;
 
     return {
       scene: this.scene,

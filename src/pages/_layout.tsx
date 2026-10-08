@@ -9,7 +9,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
     <>
       <meta
         name="description"
-        content="A private, face-driven reset that responds to your movement and helps you return with more room."
+        content="A few minutes of light and sound that slow your breath to a calm pace. Private: the camera stays on your device."
       />
       <meta name="theme-color" content="#061a1f" />
       <meta name="color-scheme" content="dark" />
@@ -17,13 +17,13 @@ export default async function RootLayout({ children }: RootLayoutProps) {
       <meta property="og:title" content="Stillness" />
       <meta
         property="og:description"
-        content="A private reset that moves with you, then opens into calm."
+        content="Breathe with the light. A private, few-minute reset that slows your breath and thins the noise."
       />
       <meta property="og:url" content="https://stillness.hyperdrift.io/" />
       <meta property="og:image" content="https://stillness.hyperdrift.io/icon-512.png" />
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content="Stillness" />
-      <meta name="twitter:description" content="A private reset that moves with you, then opens into calm." />
+      <meta name="twitter:description" content="Breathe with the light. A private, few-minute reset that slows your breath and thins the noise." />
       <meta name="twitter:image" content="https://stillness.hyperdrift.io/icon-512.png" />
       <link rel="canonical" href="https://stillness.hyperdrift.io/" />
       <link rel="icon" href="/icon.svg" type="image/svg+xml" />

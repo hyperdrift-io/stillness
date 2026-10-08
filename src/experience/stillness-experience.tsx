@@ -3,29 +3,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { trackEvent } from '../analytics/events.ts';
-import { StillnessAudio } from '../audio/stillness-audio.ts';
-import { neutralMirrorExpression } from '../sensing/mirror-signal.ts';
+import { BreathSoundscape } from '../audio/breath-soundscape.ts';
 import { MotionSensor } from '../sensing/motion-sensor.ts';
 import { PerceptionAdapter } from '../sensing/perception-adapter.ts';
 import { BaselineStore } from '../state/baseline-store.ts';
 import { SoulMirrorRenderer } from '../visual/soul-mirror-renderer.ts';
 import type { AdaptiveVisualControlFrame } from '../visual/adaptive-visual-state.ts';
-import { GuidancePolicy, type GuidanceCue } from './guidance-policy.ts';
-import { SessionController, type SessionTelemetry } from './session-controller.ts';
-import { SessionGuidance } from './session-guidance.tsx';
+import type { PacerStage } from './breath-pacer.ts';
+import {
+  SessionController,
+  type SessionSummary,
+  type SessionTelemetry,
+} from './session-controller.ts';
+import { cueWords, minutesLabel, observationLines } from './session-copy.ts';
 import { SessionMenu } from './session-menu.tsx';
 import { SessionTransitions, type SessionToken } from './session-transitions.ts';
 import {
   commandForKey,
   defaultSessionPreferences,
   type SessionPreferences,
-  type SessionTuning,
-  type SoundMode,
 } from './session-preferences.ts';
 
-type ExperienceMode = 'ready' | 'starting' | 'calibrating' | 'active' | 'error';
+type ExperienceMode = 'ready' | 'starting' | 'active' | 'after' | 'error';
+type FeltState = 'lighter' | 'same' | 'tense';
 
-const cameraUnavailableMessage = 'Camera sensing is unavailable. The reset can continue with available signals.';
+const cameraUnavailableMessage = 'Camera sensing is unavailable. The light carries the reset on its own.';
+const AMBIENT_CYCLE_MS = 10_000;
 
 const ambientVisualFrame: AdaptiveVisualControlFrame = {
   scene: 'release',
@@ -50,6 +53,9 @@ const ambientVisualFrame: AdaptiveVisualControlFrame = {
   breathPhase: 0,
   breathConfidence: 0,
   coherence: 0.82,
+  breathFullness: 0,
+  breathAmplitude: 0.5,
+  stillness: 0,
   palette: {
     shadow: [0, 0, 0],
     mid: [0.025, 0.075, 0.09],
@@ -65,37 +71,6 @@ const ambientVisualFrame: AdaptiveVisualControlFrame = {
   reducedMotion: false,
 };
 
-const initialTelemetry: SessionTelemetry = {
-  movement: 0,
-  steadiness: 0,
-  presence: 0,
-  sensingQuality: 0,
-  expressionActivity: 0,
-  headTurn: 0,
-  expression: neutralMirrorExpression,
-  softness: 0,
-  turbulence: 0,
-  settling: 0,
-  relief: 0,
-  readiness: 0,
-  confidence: 0,
-  breathRegularity: 0,
-  breathConfidence: 0,
-  temporalCoherence: 0,
-  facialTension: 0,
-  calibrationPhase: 'framing',
-  calibrationProgress: 0,
-  scene: 'turbulence',
-  contributions: {
-    movement: { value: 0, confidence: 0, configuredWeight: 0.3, effectiveWeight: 0 },
-    breathing: { value: 0, confidence: 0, configuredWeight: 0.25, effectiveWeight: 0 },
-    facialRelease: { value: 0, confidence: 0, configuredWeight: 0.25, effectiveWeight: 0 },
-    coherence: { value: 0, confidence: 0, configuredWeight: 0.2, effectiveWeight: 0 },
-  },
-  direction: 'holding',
-  source: 'scripted',
-};
-
 function isEditableTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement
     && (target.isContentEditable || target.matches('input, textarea, select'));
@@ -105,27 +80,27 @@ export function StillnessExperience() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const controllerRef = useRef<SessionController | null>(null);
-  const audioRef = useRef<StillnessAudio | null>(null);
+  const audioRef = useRef<BreathSoundscape | null>(null);
   const rendererRef = useRef<SoulMirrorRenderer | null>(null);
   const controllerTokenRef = useRef<SessionToken | null>(null);
   const cameraRequestRef = useRef(0);
   const transitionsRef = useRef(new SessionTransitions());
-  const guidancePolicyRef = useRef(new GuidancePolicy());
   const baselineRef = useRef(new BaselineStore());
+  const stageStartCycleRef = useRef<{ stage: PacerStage; cycle: number }>({ stage: 'arrive', cycle: 0 });
   const [mode, setMode] = useState<ExperienceMode>('ready');
   const [message, setMessage] = useState('');
   const [preferences, setPreferences] = useState<SessionPreferences>(() => ({
     ...defaultSessionPreferences,
   }));
-  const [telemetry, setTelemetry] = useState<SessionTelemetry>(initialTelemetry);
-  const [cue, setCue] = useState<GuidanceCue | null>(null);
+  const [telemetry, setTelemetry] = useState<SessionTelemetry | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [audioAvailable, setAudioAvailable] = useState(true);
-  const [musicAvailable, setMusicAvailable] = useState(false);
   const [cameraAvailable, setCameraAvailable] = useState(true);
+  const [summary, setSummary] = useState<SessionSummary | null>(null);
+  const [felt, setFelt] = useState<FeltState | null>(null);
 
   if (audioRef.current === null) {
-    audioRef.current = new StillnessAudio(defaultSessionPreferences.soundMode);
+    audioRef.current = new BreathSoundscape(defaultSessionPreferences.sound);
   }
 
   const reportUnavailableCamera = useCallback((
@@ -138,159 +113,126 @@ export function StillnessExperience() {
     setMessage(cameraUnavailableMessage);
   }, []);
 
+  const ambientFrame = useCallback((nowMs: number): AdaptiveVisualControlFrame => {
+    const phase = (nowMs % AMBIENT_CYCLE_MS) / AMBIENT_CYCLE_MS;
+    return {
+      ...ambientVisualFrame,
+      breathFullness: 0.5 - Math.cos(phase * Math.PI * 2) * 0.5,
+      requestedQuality: preferences.tuning.quality,
+      visualIntensity: preferences.tuning.visualIntensity * ambientVisualFrame.visualIntensity,
+    };
+  }, [preferences.tuning.quality, preferences.tuning.visualIntensity]);
+
   const startAmbientField = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const existingRenderer = rendererRef.current;
     const renderer = existingRenderer ?? new SoulMirrorRenderer(canvas);
     try {
-      renderer.setVariation(
-        preferences.variationSeed,
-        preferences.visualControl === 'auto',
-      );
-      renderer.update({
-        ...ambientVisualFrame,
-        variationSeed: preferences.variationSeed,
-        requestedQuality: preferences.tuning.quality,
-        visualIntensity: preferences.tuning.visualIntensity * ambientVisualFrame.visualIntensity,
-      });
+      renderer.setVariation(0, true);
+      renderer.update(ambientFrame(performance.now()));
       renderer.start();
       rendererRef.current = renderer;
     } catch {
       if (existingRenderer === null) renderer.dispose();
       rendererRef.current = null;
     }
-  }, [preferences.tuning.quality, preferences.tuning.visualIntensity, preferences.variationSeed, preferences.visualControl]);
+  }, [ambientFrame]);
 
   const leave = useCallback((): Promise<void> => {
     const controller = controllerRef.current;
     const token = controllerTokenRef.current;
     if (controller === null || token === null) return Promise.resolve();
 
-    const elapsedSeconds = Math.round(controller.snapshot().elapsedMs / 1_000);
+    const sessionSummary = controller.summary();
     return transitionsRef.current.leave(token, () => controller.stop(), () => {
       cameraRequestRef.current += 1;
       if (controllerTokenRef.current === token) {
         controllerRef.current = null;
         controllerTokenRef.current = null;
       }
-      guidancePolicyRef.current.reset();
-      setTelemetry(initialTelemetry);
-      setCue(null);
+      setTelemetry(null);
       setMenuOpen(false);
       setAudioAvailable(true);
-      setMusicAvailable(false);
       setCameraAvailable(true);
-      setMode('ready');
+      setSummary(sessionSummary);
+      setFelt(null);
+      setMode('after');
       setMessage('');
-      trackEvent('session_ended', { elapsed_seconds: elapsedSeconds });
+      trackEvent('session_ended', {
+        elapsed_seconds: sessionSummary.elapsedSeconds,
+        stage: sessionSummary.stage,
+        sensed: sessionSummary.sensed,
+        breath_start: sessionSummary.breathsPerMinute.start ?? -1,
+        breath_end: sessionSummary.breathsPerMinute.end ?? -1,
+        movement_start: sessionSummary.movement.start ?? -1,
+        movement_end: sessionSummary.movement.end ?? -1,
+        tension_start: sessionSummary.tension.start ?? -1,
+        tension_end: sessionSummary.tension.end ?? -1,
+      });
     });
   }, []);
 
   const togglePreference = useCallback((
-    preference: 'mode' | 'soundMode' | 'liveSignals' | 'camera' | 'visualControl',
-    enabled: boolean | SessionPreferences['mode'] | SessionPreferences['visualControl'] | SoundMode,
+    preference: 'sound' | 'liveSignals' | 'camera',
+    enabled: boolean,
   ) => {
-    if (preference === 'mode') {
-      const nextMode = enabled === 'guided' ? 'guided' : 'pure';
-      setPreferences((current) => ({ ...current, mode: nextMode }));
-      trackEvent('session_preference_changed', { preference, enabled: nextMode });
-      if (nextMode === 'guided') {
-        guidancePolicyRef.current.reset();
-        const elapsedMs = controllerRef.current?.snapshot().elapsedMs ?? 0;
-        setCue(guidancePolicyRef.current.evaluate(telemetry, elapsedMs));
-      } else {
-        setCue(null);
-      }
-      return;
-    }
-
-    if (preference === 'visualControl') {
-      const visualControl = enabled === 'locked' ? 'locked' : 'auto';
-      setPreferences((current) => ({ ...current, visualControl }));
-      trackEvent('session_preference_changed', { preference, enabled: visualControl });
-      return;
-    }
-
-    if (preference === 'soundMode') {
-      const soundMode: SoundMode = enabled === 'music'
-        ? 'music'
-        : enabled === 'waves'
-          ? 'waves'
-          : 'off';
+    if (preference === 'sound') {
       const controller = controllerRef.current;
       const token = controllerTokenRef.current;
+      setPreferences((current) => ({ ...current, sound: enabled }));
+      trackEvent('session_preference_changed', { preference, enabled });
       if (!controller || token === null) return;
-      void controller.setSoundMode(soundMode).then((available) => {
+      void controller.setSoundEnabled(enabled).then((available) => {
         if (!transitionsRef.current.owns(token)) return;
         if (!available) {
-          setMessage(soundMode === 'music'
-            ? 'The local album stream is not available on this server.'
-            : 'Sound is unavailable in this browser.');
-          return;
+          setAudioAvailable(false);
+          setMessage('Sound is unavailable in this browser.');
         }
-        setMessage('');
-        setPreferences((current) => ({ ...current, soundMode }));
-        trackEvent('session_preference_changed', { preference, enabled: soundMode });
       });
       return;
     }
 
-    const nextEnabled = Boolean(enabled);
-    setPreferences((current) => ({ ...current, [preference]: nextEnabled }));
-    trackEvent('session_preference_changed', { preference, enabled: nextEnabled });
+    setPreferences((current) => ({ ...current, [preference]: enabled }));
+    trackEvent('session_preference_changed', { preference, enabled });
 
     if (preference === 'camera') {
       const token = controllerTokenRef.current;
       const cameraRequest = ++cameraRequestRef.current;
       const controller = controllerRef.current;
       setCameraAvailable(false);
-      setMessage(nextEnabled ? 'Reconnecting the private mirror.' : '');
-      void controller?.setCameraEnabled(nextEnabled).then((available) => {
+      setMessage(enabled ? 'Reconnecting the private mirror.' : '');
+      void controller?.setCameraEnabled(enabled).then((available) => {
         if (cameraRequest !== cameraRequestRef.current) return;
-        if (nextEnabled && !available && !controller.isCameraEnabled()) {
+        if (enabled && !available && !controller.isCameraEnabled()) {
           reportUnavailableCamera(token, cameraRequest);
         }
-        if (nextEnabled && available) {
+        if (enabled && available) {
           setCameraAvailable(true);
           setMessage('');
         }
       });
     }
-  }, [reportUnavailableCamera, telemetry]);
+  }, [reportUnavailableCamera]);
 
-  const changeTuning = useCallback(function changeTuning<Key extends keyof SessionTuning>(
-    key: Key,
-    value: SessionTuning[Key],
-  ) {
-    setPreferences((current) => {
-      const tuning = { ...current.tuning, [key]: value };
-      controllerRef.current?.setTuning(tuning);
-      return { ...current, tuning };
-    });
-  }, []);
-
-  const nextVariation = useCallback(() => {
-    setPreferences((current) => ({
-      ...current,
-      variationSeed: current.variationSeed + 1,
-    }));
-  }, []);
+  const recordFeltState = useCallback((value: FeltState) => {
+    setFelt(value);
+    trackEvent('felt_state', { value, elapsed_seconds: summary?.elapsedSeconds ?? 0 });
+  }, [summary]);
 
   useEffect(() => {
-    rendererRef.current?.setVariation(
-      preferences.variationSeed,
-      preferences.visualControl === 'auto',
-    );
-  }, [preferences.variationSeed, preferences.visualControl]);
+    if (mode !== 'ready' && mode !== 'after' && mode !== 'error') return;
+    startAmbientField();
+    let handle = 0;
+    const breathe = (nowMs: number) => {
+      rendererRef.current?.update(ambientFrame(nowMs));
+      handle = requestAnimationFrame(breathe);
+    };
+    handle = requestAnimationFrame(breathe);
+    return () => cancelAnimationFrame(handle);
+  }, [ambientFrame, mode, startAmbientField]);
 
   useEffect(() => {
-    if (mode === 'ready') startAmbientField();
-  }, [mode, startAmbientField]);
-
-  useEffect(() => {
-    void audioRef.current?.prime();
     const localDevelopment = window.location.hostname === 'localhost'
       || window.location.hostname === '127.0.0.1';
     if ('serviceWorker' in navigator && !localDevelopment) {
@@ -299,7 +241,6 @@ export function StillnessExperience() {
         const urls = performance.getEntriesByType('resource')
           .map((entry) => new URL(entry.name))
           .filter((url) => url.origin === window.location.origin)
-          .filter((url) => !url.pathname.startsWith('/local-music/'))
           .map((url) => `${url.pathname}${url.search}`);
         registration.active?.postMessage({ type: 'CACHE_URLS', urls });
       }).catch(() => {
@@ -337,7 +278,6 @@ export function StillnessExperience() {
         }
         return;
       }
-
       const command = commandForKey({
         key: event.key,
         modifier: event.altKey || event.ctrlKey || event.metaKey,
@@ -345,16 +285,12 @@ export function StillnessExperience() {
       });
       if (command === null) return;
       event.preventDefault();
-
       switch (command) {
         case 'menu':
           setMenuOpen((open) => !open);
           break;
         case 'sound':
-          togglePreference('soundMode', preferences.soundMode === 'off' ? 'waves' : 'off');
-          break;
-        case 'guidance':
-          togglePreference('mode', preferences.mode === 'guided' ? 'pure' : 'guided');
+          togglePreference('sound', !preferences.sound);
           break;
         case 'signals':
           if (!menuOpen) {
@@ -367,9 +303,6 @@ export function StillnessExperience() {
         case 'camera':
           togglePreference('camera', !preferences.camera);
           break;
-        case 'variation':
-          nextVariation();
-          break;
       }
     };
     const onVisibilityChange = () => {
@@ -381,7 +314,7 @@ export function StillnessExperience() {
       window.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [leave, menuOpen, mode, nextVariation, preferences, togglePreference]);
+  }, [leave, menuOpen, mode, preferences, togglePreference]);
 
   async function begin(): Promise<void> {
     const canvas = canvasRef.current;
@@ -392,23 +325,26 @@ export function StillnessExperience() {
 
     setMode('starting');
     setMessage('');
-    guidancePolicyRef.current.reset();
-    setTelemetry(initialTelemetry);
-    setCue(null);
+    setTelemetry(null);
     setMenuOpen(false);
     setAudioAvailable(true);
-    setMusicAvailable(false);
     setCameraAvailable(preferences.camera);
+    setSummary(null);
+    setFelt(null);
+    stageStartCycleRef.current = { stage: 'arrive', cycle: 0 };
 
     let controller: SessionController | null = null;
     try {
       const camera = new PerceptionAdapter();
       const renderer = rendererRef.current ?? new SoulMirrorRenderer(canvas);
-      renderer.setVariation(preferences.variationSeed, preferences.visualControl === 'auto');
+      renderer.setVariation(0, true);
       rendererRef.current = renderer;
+      const audio = audioRef.current ?? new BreathSoundscape(preferences.sound);
+      audioRef.current = audio;
+      void audio.setEnabled(preferences.sound);
       controller = new SessionController({
         renderer,
-        audio: audioRef.current ?? new StillnessAudio(preferences.soundMode),
+        audio,
         camera,
         motion: new MotionSensor(),
         baseline: baselineRef.current,
@@ -417,16 +353,15 @@ export function StillnessExperience() {
         cancelFrame: (handle) => cancelAnimationFrame(handle),
         onTelemetry: (nextTelemetry) => {
           if (!transitionsRef.current.owns(token) || controller === null) return;
-          setTelemetry(nextTelemetry);
-          if (nextTelemetry.calibrationPhase === 'framing') {
-            setMessage('Find a comfortable distance so your face and shoulders can shape the field.');
-          } else if (nextTelemetry.calibrationPhase === 'sampling') {
-            setMessage('The field is learning your natural movement. Stay as you are.');
+          const stage = nextTelemetry.pacer.stage;
+          if (stage !== stageStartCycleRef.current.stage) {
+            stageStartCycleRef.current = { stage, cycle: nextTelemetry.pacer.cycleIndex };
+            trackEvent('stage_reached', {
+              stage,
+              elapsed_seconds: Math.round(nextTelemetry.pacer.elapsedMs / 1_000),
+            });
           }
-          setCue(guidancePolicyRef.current.evaluate(
-            nextTelemetry,
-            controller.snapshot().elapsedMs,
-          ));
+          setTelemetry(nextTelemetry);
         },
         onCameraAvailabilityChange: (available) => {
           if (available) {
@@ -442,42 +377,26 @@ export function StillnessExperience() {
       controllerTokenRef.current = token;
 
       if (!preferences.camera) void controller.setCameraEnabled(false);
-      setMode('calibrating');
       setMessage(preferences.camera
         ? 'Opening the private mirror on this device.'
-        : 'Opening the reset with available signals.');
+        : 'Opening the light.');
       const startResult = await controller.start();
       if (!transitionsRef.current.owns(token)) {
         await controller.stop();
         return;
       }
-      const requestedCamera = preferences.camera;
-      if (requestedCamera && !startResult.cameraStarted) {
+      if (preferences.camera && !startResult.cameraStarted) {
         reportUnavailableCamera(token, cameraRequest);
       } else if (startResult.cameraStarted) {
         setCameraAvailable(true);
       }
       const soundAvailable = controller.isAudioAvailable();
-      const localMusicAvailable = controller.isMusicAvailable();
-      const soundApplied = soundAvailable && (
-        preferences.soundMode === 'off'
-        || await controller.setSoundMode(preferences.soundMode)
-      );
-      if (!soundApplied && soundAvailable) {
-        await controller.setSoundMode('off');
-        setPreferences((current) => ({ ...current, soundMode: 'off' }));
-      }
-      if (startResult.cameraStarted) await controller.waitForCalibration();
-      if (!transitionsRef.current.owns(token)) return;
       transitionsRef.current.activate(token, () => {
         setAudioAvailable(soundAvailable);
-        setMusicAvailable(localMusicAvailable);
         setMode('active');
-        setMessage('');
+        if (startResult.cameraStarted || !preferences.camera) setMessage('');
         trackEvent('session_started', {
-          mode: preferences.mode,
-          guidance: preferences.mode === 'guided',
-          sound: soundApplied ? preferences.soundMode : 'off',
+          sound: soundAvailable && preferences.sound,
           camera: startResult.cameraStarted,
         });
       });
@@ -488,11 +407,17 @@ export function StillnessExperience() {
           controllerRef.current = null;
           controllerTokenRef.current = null;
         }
-        setMessage('This browser could not open the soul mirror. A current browser can open it.');
+        setMessage('This browser could not open the light. A current browser can.');
         setMode('error');
       });
     }
   }
+
+  const cue = telemetry
+    ? cueWords(telemetry.pacer, stageStartCycleRef.current.cycle)
+    : '';
+  const panelVisible = mode !== 'active';
+  const observations = summary ? observationLines(summary) : [];
 
   return (
     <div className="experience" data-mode={mode} data-testid="stillness-experience">
@@ -500,40 +425,71 @@ export function StillnessExperience() {
 
       <section
         className="entry-panel"
+        data-panel={mode === 'after' ? 'after' : 'entry'}
         aria-labelledby="stillness-title"
-        aria-hidden={mode === 'active'}
-        inert={mode === 'active' ? true : undefined}
+        aria-hidden={!panelVisible}
+        inert={panelVisible ? undefined : true}
       >
-        <div className="entry-copy">
-          <p className="eyebrow">Relief</p>
-          <h1 id="stillness-title">Take a minute back.</h1>
-          <p>A private mirror that moves with you, then opens into calm.</p>
-          <div className="entry-actions">
-            <button
-              className="primary"
-              type="button"
-              onClick={() => void begin()}
-              disabled={mode !== 'ready'}
-            >
-              {mode === 'starting'
-                ? 'Allow camera'
-                : mode === 'calibrating'
-                  ? 'Calibrating'
-                  : 'Begin reset'}
-            </button>
+        {mode === 'after' && summary ? (
+          <div className="entry-copy">
+            <p className="eyebrow">Stillness</p>
+            <h1 id="stillness-title">The slow breath is yours now.</h1>
+            <ul className="observations" aria-label="What the light observed">
+              {observations.map((line) => <li key={line}>{line}</li>)}
+            </ul>
+            {felt === null ? (
+              <fieldset className="felt-state">
+                <legend>How do you feel?</legend>
+                <button type="button" onClick={() => recordFeltState('lighter')}>Lighter</button>
+                <button type="button" onClick={() => recordFeltState('same')}>About the same</button>
+                <button type="button" onClick={() => recordFeltState('tense')}>Still tense</button>
+              </fieldset>
+            ) : (
+              <p className="mode-note" role="status">
+                {felt === 'tense'
+                  ? 'Thank you. A second round often goes deeper; the light is here whenever you want it.'
+                  : `Thank you. ${minutesLabel(summary.elapsedSeconds)} well spent.`}
+              </p>
+            )}
+            <div className="entry-actions">
+              <button className="primary" type="button" onClick={() => void begin()}>
+                Begin again
+              </button>
+            </div>
           </div>
-          <p className="mode-note">Camera stays on this device. Nothing is saved or sent.</p>
-          {message ? <p className="system-message" role="status">{message}</p> : null}
-        </div>
+        ) : (
+          <div className="entry-copy">
+            <p className="eyebrow">Stillness</p>
+            <h1 id="stillness-title">Breathe with the light.</h1>
+            <p>A few minutes. The light slows, you follow, and the noise thins out.</p>
+            <div className="entry-actions">
+              <button
+                className="primary"
+                type="button"
+                onClick={() => void begin()}
+                disabled={mode === 'starting'}
+              >
+                {mode === 'starting' ? 'Opening' : 'Begin'}
+              </button>
+            </div>
+            <p className="mode-note">Sound on. Camera stays on this device. Nothing is saved or sent.</p>
+            {message ? <p className="system-message" role="status">{message}</p> : null}
+          </div>
+        )}
       </section>
 
       {mode === 'active' ? (
         <>
-          {preferences.mode === 'guided' ? (
-            <>
-              <SessionGuidance key={cue?.id ?? 'quiet'} cue={cue} visible />
-            </>
-          ) : null}
+          <p
+            key={`${telemetry?.pacer.cycleIndex ?? 0}-${telemetry?.pacer.cue ?? 'rest'}`}
+            className="breath-cue"
+            data-cue={telemetry?.pacer.cue ?? 'rest'}
+            data-stage={telemetry?.pacer.stage ?? 'arrive'}
+            aria-live="polite"
+          >
+            {cue}
+          </p>
+          {message ? <p className="session-message" role="status">{message}</p> : null}
           <button
             ref={menuTriggerRef}
             className="session-menu-trigger"
@@ -547,20 +503,17 @@ export function StillnessExperience() {
             preferences={preferences}
             telemetry={telemetry}
             audioAvailable={audioAvailable}
-            musicAvailable={musicAvailable}
             cameraAvailable={cameraAvailable}
             open={menuOpen}
             triggerRef={menuTriggerRef}
             onToggle={togglePreference}
-            onTuningChange={changeTuning}
-            onNextVariation={nextVariation}
             onClose={() => setMenuOpen(false)}
             onLeave={() => void leave()}
           />
         </>
       ) : null}
       <p className="visually-hidden" aria-live="polite">
-        {mode === 'active' ? 'The experience has begun. Press Escape to leave.' : ''}
+        {mode === 'active' ? 'The light is breathing. Press Escape to leave.' : ''}
       </p>
     </div>
   );

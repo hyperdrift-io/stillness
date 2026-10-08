@@ -1,6 +1,4 @@
-import type { SessionRenderFrame } from '../experience/model.ts';
 import type { PerceptionModulationFrame } from '../sensing/perception-worker-protocol.ts';
-import type { AdaptiveScene } from '../state/adaptive-state.ts';
 import { AdaptiveVisualCore } from './adaptive-visual-core.ts';
 import type {
   AdaptiveVisualControlFrame,
@@ -8,49 +6,7 @@ import type {
   RequestedRendererQuality,
 } from './adaptive-visual-state.ts';
 
-const MAX_LEGACY_TOPOLOGY_SEGMENTS = 4_096;
 const AUTOMATIC_VARIATION_INTERVAL_MS = 18_000;
-const neutralPalette = {
-  shadow: [0, 0, 0] as const,
-  mid: [0.035, 0.055, 0.11] as const,
-  light: [0.58, 0.72, 0.92] as const,
-  confidence: 0,
-};
-
-function clamp(value: number, minimum: number, maximum: number, fallback: number): number {
-  if (!Number.isFinite(value)) return fallback;
-  return Math.min(maximum, Math.max(minimum, value));
-}
-
-function clamp01(value: number, fallback = 0): number {
-  return clamp(value, 0, 1, fallback);
-}
-
-function clampSigned(value: number): number {
-  return clamp(value, -1, 1, 0);
-}
-
-function isAdaptiveVisualFrame(
-  frame: AdaptiveVisualControlFrame | SessionRenderFrame,
-): frame is AdaptiveVisualControlFrame {
-  return 'scene' in frame && 'topologySegments' in frame;
-}
-
-function sceneForProgress(progress: number): AdaptiveScene {
-  if (progress < 0.18) return 'turbulence';
-  if (progress < 0.38) return 'gathering';
-  if (progress < 0.6) return 'coherence';
-  if (progress < 0.82) return 'release';
-  return 'radiance';
-}
-
-function sceneStart(scene: AdaptiveScene): number {
-  if (scene === 'gathering') return 0.18;
-  if (scene === 'coherence') return 0.38;
-  if (scene === 'release') return 0.6;
-  if (scene === 'radiance') return 0.82;
-  return 0;
-}
 
 function dprCap(quality: RequestedRendererQuality, reducedMotion: boolean): number {
   if (reducedMotion || quality === 'reduced') return 1;
@@ -99,12 +55,10 @@ export class SoulMirrorRenderer {
     }
   }
 
-  update(frame: AdaptiveVisualControlFrame | SessionRenderFrame): void {
+  update(frame: AdaptiveVisualControlFrame): void {
     const previousScene = this.target?.scene;
-    this.target = isAdaptiveVisualFrame(frame)
-      ? frame
-      : frame.adaptive ?? this.mapLegacyFrame(frame);
-    if (previousScene !== this.target.scene) this.variationStartedAt = performance.now();
+    this.target = frame;
+    if (previousScene !== frame.scene) this.variationStartedAt = performance.now();
     this.pushTargetToCore();
   }
 
@@ -272,105 +226,5 @@ export class SoulMirrorRenderer {
     this.core = null;
     const failure = error instanceof Error ? error : new Error(String(error));
     console.error('Relief visual field stopped after a rendering error.', failure);
-  }
-
-  /**
-   * Temporary Task 8 compatibility boundary. This is the only path from the
-   * legacy SessionRenderFrame into the adaptive renderer, and it never forwards
-   * `mirror.sourceVideo` or any other raw camera pixels.
-   */
-  private mapLegacyFrame(frame: SessionRenderFrame): AdaptiveVisualControlFrame {
-    const relief = frame.relief;
-    const mirror = frame.mirror;
-    const coherence = clamp01(frame.resonance.coherence, 0.5);
-    const progress = clamp01(
-      clamp01(relief.relief) * 0.46
-        + clamp01(relief.readiness) * 0.28
-        + clamp01(relief.settling) * 0.16
-        + coherence * 0.1
-        - clamp01(relief.turbulence) * 0.08,
-    );
-    const scene = sceneForProgress(progress);
-    const sceneMix = scene === 'turbulence'
-      ? 1
-      : clamp01((progress - sceneStart(scene)) / 0.08);
-
-    const topology = mirror.topology;
-    const packed = new Float32Array(
-      Math.min(topology?.connections.length ?? 0, MAX_LEGACY_TOPOLOGY_SEGMENTS) * 6,
-    );
-    let offset = 0;
-    if (topology) {
-      const connectionCount = Math.min(
-        topology.connections.length,
-        MAX_LEGACY_TOPOLOGY_SEGMENTS,
-      );
-      for (let index = 0; index < connectionCount; index += 1) {
-        const connection = topology.connections[index];
-        if (!connection) continue;
-        const start = topology.points[connection.start];
-        const end = topology.points[connection.end];
-        if (
-          !start
-          || !end
-          || !Number.isFinite(start.x)
-          || !Number.isFinite(start.y)
-          || !Number.isFinite(start.z)
-          || !Number.isFinite(end.x)
-          || !Number.isFinite(end.y)
-          || !Number.isFinite(end.z)
-        ) continue;
-        // Legacy topology is clip-space. Convert back to normalized landmark
-        // coordinates expected by the adaptive face ribbon shader.
-        packed[offset] = clamp01((start.x + 1) * 0.5);
-        packed[offset + 1] = clamp01((1 - start.y) * 0.5);
-        packed[offset + 2] = clampSigned(start.z);
-        packed[offset + 3] = clamp01((end.x + 1) * 0.5);
-        packed[offset + 4] = clamp01((1 - end.y) * 0.5);
-        packed[offset + 5] = clampSigned(end.z);
-        offset += 6;
-      }
-    }
-
-    const expression = mirror.expression;
-    return {
-      scene,
-      sceneMix,
-      progress,
-      movementEnergy: clamp01(Math.max(relief.motion, mirror.motion)),
-      movementX: 0,
-      movementY: 0,
-      faceConfidence: clamp01(mirror.confidence),
-      faceCenterX: topology ? clamp01((topology.centerX + 1) * 0.5) : 0.5,
-      faceCenterY: topology ? clamp01((topology.centerY + 1) * 0.5) : 0.5,
-      faceScale: topology ? clamp01(topology.scale * 0.5) : 0,
-      headYaw: topology ? clampSigned(topology.yaw) : 0,
-      headPitch: topology ? clampSigned(topology.pitch) : 0,
-      headRoll: topology ? clampSigned(topology.roll) : 0,
-      facialTension: clamp01(expression.browTension),
-      facialWarmth: clamp01(
-        clamp01(expression.mouthSmile) * 0.65 + clamp01(relief.softness, 0.5) * 0.35,
-      ),
-      expressiveActivation: clamp01(Math.max(
-        relief.expressionActivity,
-        mirror.expressionActivity,
-        expression.activity,
-        expression.mouthOpen,
-      )),
-      mouthOpen: clamp01(expression.mouthOpen),
-      browLift: clamp01(expression.browLift),
-      eyeClosure: clamp01(expression.eyeClosure),
-      breathPhase: 0,
-      breathConfidence: 0,
-      coherence,
-      palette: neutralPalette,
-      topologySegments: offset === packed.length ? packed : packed.slice(0, offset),
-      colorInfluence: 0.2,
-      visualIntensity: 1,
-      transitionSeconds: 4.5,
-      requestedQuality: 'auto',
-      variationSeed: this.variationSeed,
-      reducedMotion: false,
-    };
   }
 }

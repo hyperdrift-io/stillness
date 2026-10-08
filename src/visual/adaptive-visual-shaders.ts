@@ -9,8 +9,9 @@
  * The modulation texture is analysis data, not camera imagery:
  * R = luminance-gradient magnitude, G = temporal frame difference,
  * B = face-and-shoulder influence, A = 1. The host uploads it without colour
- * conversion and supplies `uBreathScale`; that value must remain 1 unless the
- * breath-confidence gate has already passed 0.35.
+ * conversion and supplies `uBreathScale`, the slow zoom the breath pacer
+ * drives: 1 with empty lungs, slightly above 1 with full lungs. A cycle lasts
+ * five to ten seconds, far below any flicker band.
  */
 
 export const fullscreenVertexShader = `#version 300 es
@@ -47,8 +48,7 @@ uniform float uSceneMix;
 uniform float uVariationSeed;
 uniform float uBreathScale;
 uniform float uReducedMotion;
-uniform float uAudioActive;
-uniform float uAudioBeat;
+uniform float uStillness;
 
 in vec2 vUv;
 out vec4 outColor;
@@ -132,11 +132,7 @@ void main() {
   );
 
   float fallAllowance = mix(1.0, 0.12, clamp(uReducedMotion, 0.0, 1.0));
-  float beatAcceleration = clamp(uAudioActive, 0.0, 1.0)
-    * smoothstep(0.04, 0.5, clamp(uAudioBeat, 0.0, 1.0));
-  float fallScale = 1.0 + (
-    0.00018 + beatAcceleration * 0.00068
-  ) * max(uDeltaScale, 0.0) * fallAllowance;
+  float fallScale = 1.0 + 0.00018 * max(uDeltaScale, 0.0) * fallAllowance;
   vec2 centered = (vUv - 0.5) / max(uBreathScale * fallScale, 0.94);
   float aspect = uResolution.x / max(uResolution.y, 1.0);
   vec2 aspectPoint = vec2(centered.x * aspect, centered.y);
@@ -157,7 +153,9 @@ void main() {
 
   vec2 sampleUv = clamp(centered + 0.5 - displacement, vec2(0.001), vec2(0.999));
   vec3 history = texture(uFeedback, sampleUv).rgb;
-  float frameDecay = pow(decay, max(uDeltaScale, 0.0));
+  // Stillness lets the trails go: history fades faster, the field empties.
+  float settledDecay = mix(decay, 0.905, clamp(uStillness, 0.0, 1.0));
+  float frameDecay = pow(settledDecay, max(uDeltaScale, 0.0));
   outColor = vec4(history * frameDecay, 1.0);
 }
 `;
@@ -188,6 +186,7 @@ uniform vec3 uPaletteMid;
 uniform vec3 uPaletteLight;
 uniform float uPaletteConfidence;
 uniform float uColorInfluence;
+uniform float uStillness;
 
 in vec2 vUv;
 out vec4 outColor;
@@ -423,9 +422,11 @@ void main() {
   float activation = 0.86 + clamp(uExpressiveActivation, 0.0, 1.0) * 0.20;
   float warmth = 0.94 + clamp(uFacialWarmth, 0.0, 1.0) * 0.12;
   float progressLift = mix(0.94, 1.06, clamp(uProgress, 0.0, 1.0));
+  // Stillness removes the apparatus that held attention; the breath light stays.
+  float quiet = 1.0 - clamp(uStillness, 0.0, 1.0) * 0.7;
   float frameScale = max(uDeltaScale, 0.0) * 0.52;
   outColor = vec4(
-    emission * activation * warmth * progressLift
+    emission * activation * warmth * progressLift * quiet
       * clamp(uVisualIntensity, 0.75, 1.25) * frameScale,
     1.0
   );
@@ -454,8 +455,6 @@ uniform float uBrowLift;
 uniform float uEyeClosure;
 uniform float uBreathScale;
 uniform float uReducedMotion;
-uniform float uAudioActive;
-uniform float uAudioBeat;
 
 out float vAcross;
 out float vAlong;
@@ -500,18 +499,12 @@ void main() {
   float browLift = clamp(uBrowLift, 0.0, 1.0);
   float eyeClosure = clamp(uEyeClosure, 0.0, 1.0);
   float motionAllowance = mix(1.0, 0.18, clamp(uReducedMotion, 0.0, 1.0));
-  float beatPulse = smoothstep(0.04, 0.5, clamp(uAudioBeat, 0.0, 1.0));
-  float audioMotion = clamp(uAudioActive, 0.0, 1.0) * beatPulse * motionAllowance;
   float instancePhase = float(gl_InstanceID) * 0.754877666;
   float along = corner.x;
   float curve = sin(along * 3.141592653589793) * sin(instancePhase + uTime * 0.8)
     * tension * 0.006;
   float highFrequency = sin(along * mix(8.0, 22.0, tension) + instancePhase * 3.1 + uTime * 2.2)
     * tension * tension * 0.0018;
-  curve += sin(along * 6.283185307179586 + instancePhase * 1.7 + uTime * 3.4)
-    * audioMotion * 0.009;
-  highFrequency += sin(along * 18.0 - instancePhase * 2.3 + uTime * 5.2)
-    * audioMotion * 0.0032;
   vec2 mirroredCenter = vec2(1.0 - uFaceCenter.x, 1.0 - uFaceCenter.y);
   vec2 source = mix(
     vec2(1.0 - aStart.x, 1.0 - aStart.y),
@@ -547,10 +540,8 @@ void main() {
 
   float depth = mix(aStart.z, aEnd.z, along);
   float depthPresence = 1.0 / (1.0 + abs(depth) * 7.0);
-  float widthPixels = (
-    mix(1.2, 3.0, max(warmth, expressionResponse))
-      + clamp(uAudioActive, 0.0, 1.0) * beatPulse * 3.2 * motionAllowance
-  ) * mix(0.78, 1.0, depthPresence);
+  float widthPixels = mix(1.2, 3.0, max(warmth, expressionResponse))
+    * mix(0.78, 1.0, depthPresence);
   vec2 position = center + normal * corner.y * widthPixels / max(uResolution, vec2(1.0));
   vAcross = corner.y;
   vAlong = along;
@@ -575,9 +566,8 @@ uniform float uDeltaScale;
 uniform vec3 uPaletteLight;
 uniform float uPaletteConfidence;
 uniform float uColorInfluence;
-uniform float uAudioActive;
-uniform float uAudioBeat;
 uniform float uReducedMotion;
+uniform float uStillness;
 
 in float vAcross;
 in float vAlong;
@@ -610,14 +600,14 @@ void main() {
   vec3 color = mix(authored, uPaletteLight, paletteAmount);
   float frequencySpark = mix(0.92, 1.22, tension);
   float connectedLine = edge * mix(0.72, 1.0, cap);
-  float beatBloom = clamp(uAudioActive, 0.0, 1.0)
-    * smoothstep(0.04, 0.5, clamp(uAudioBeat, 0.0, 1.0))
-    * mix(1.0, 0.35, clamp(uReducedMotion, 0.0, 1.0));
+  // The constellation is the person arriving; it dissolves into the light
+  // as the session settles, so stillness ends with light and no mirror.
+  float dissolve = 1.0 - smoothstep(0.0, 1.0, clamp(uStillness, 0.0, 1.0)) * 0.92;
   float intensity = connectedLine * vDepth * frequencySpark * vPresence
     * clamp(uVisualIntensity, 0.75, 1.25)
     * clamp(uDeltaScale, 0.0, 2.0)
     * (0.17 + vExpression * 0.12 + warmth * 0.05)
-    * (1.0 + beatBloom * 1.35);
+    * dissolve;
   outColor = vec4(color * intensity, 1.0);
 }
 `;
@@ -657,11 +647,11 @@ uniform sampler2D uFeedback;
 uniform sampler2D uBloom;
 uniform vec2 uResolution;
 uniform float uVisualIntensity;
-uniform float uAudioActive;
-uniform float uAudioEnergy;
-uniform float uAudioBass;
-uniform float uAudioBeat;
-uniform float uAudioHue;
+uniform float uBreathFullness;
+uniform float uBreathAmplitude;
+uniform float uStillness;
+uniform float uProgress;
+uniform float uReducedMotion;
 
 in vec2 vUv;
 out vec4 outColor;
@@ -675,49 +665,50 @@ vec3 acesApproximation(vec3 color) {
   return clamp((color * (a * color + b)) / (color * (c * color + d) + e), 0.0, 1.0);
 }
 
-vec3 spectrumColor(float hue) {
-  const float TAU = 6.283185307179586;
-  return 0.5 + 0.5 * cos(TAU * (hue + vec3(0.0, 0.6666667, 0.3333333)));
-}
-
 void main() {
-  float beat = clamp(uAudioActive, 0.0, 1.0)
-    * smoothstep(0.04, 0.5, clamp(uAudioBeat, 0.0, 1.0));
-  vec2 displayUv = vec2(0.5) + (vUv - vec2(0.5)) / (1.0 + beat * 0.062);
-  displayUv = clamp(displayUv, vec2(0.001), vec2(0.999));
-  vec3 feedback = texture(uFeedback, displayUv).rgb;
-  vec3 bloom = texture(uBloom, displayUv).rgb;
-  float audioPulse = clamp(uAudioActive, 0.0, 1.0)
-    * (
-      clamp(uAudioEnergy, 0.0, 1.0) * 0.25
-      + clamp(uAudioBass, 0.0, 1.0) * 0.2
-      + clamp(uAudioBeat, 0.0, 1.0) * 0.55
-    );
-  vec3 color = feedback + bloom * (0.06 + beat * 0.075 + audioPulse * 0.016);
-  float sourceLuminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
-  vec3 spectrum = mix(vec3(0.72), spectrumColor(uAudioHue), 0.48);
-  float spectrumLuminance = dot(spectrum, vec3(0.2126, 0.7152, 0.0722));
-  spectrum *= 0.72 / max(spectrumLuminance, 0.12);
-  vec3 cycleTarget = spectrum * (sourceLuminance / 0.72);
-  float spectrumAmount = 0.46 + audioPulse * 0.04;
-  color = mix(color, cycleTarget, spectrumAmount);
+  vec3 feedback = texture(uFeedback, vUv).rgb;
+  vec3 bloom = texture(uBloom, vUv).rgb;
+  vec3 color = feedback + bloom * 0.07;
 
   // Preserve local contrast: soften chroma without normalising every bright
   // pixel to the same luminance, which previously flattened the face into fog.
   float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
-  float saturation = mix(0.82, 0.74, clamp(uAudioActive, 0.0, 1.0));
-  color = mix(vec3(luminance), color, saturation);
+  color = mix(vec3(luminance), color, 0.84);
   color = max(color - vec3(0.012), vec3(0.0));
-  color = acesApproximation(color * clamp(uVisualIntensity, 0.75, 1.25) * 0.64);
+  color = acesApproximation(color * clamp(uVisualIntensity, 0.75, 1.25) * 0.82);
 
   float aspect = uResolution.x / max(uResolution.y, 1.0);
   vec2 point = vec2((vUv.x - 0.5) * aspect, vUv.y - 0.5);
-  float vignette = 1.0 - smoothstep(0.44, 0.92, length(point)) * 0.34;
+  float radius = length(point);
+
+  // The breath light: one soft centre that fills with the lungs and empties
+  // with the exhale. Warm ember while arriving, pearl once still. Its whole
+  // cycle lasts five to ten seconds, so luminance never flickers.
+  float fullness = clamp(uBreathFullness, 0.0, 1.0);
+  float amplitude = clamp(uBreathAmplitude, 0.0, 1.0);
+  float stillness = clamp(uStillness, 0.0, 1.0);
+  float progress = clamp(uProgress, 0.0, 1.0);
+  float motionAllowance = mix(1.0, 0.45, clamp(uReducedMotion, 0.0, 1.0));
+  // Empty lungs keep a visible ember; full lungs open into the room.
+  float swell = mix(0.34, 1.0, fullness) * motionAllowance;
+  float reach = mix(0.2, 0.44, fullness * motionAllowance) * mix(1.0, 0.72, stillness);
+  float core = exp(-(radius * radius) / (reach * reach * 0.18));
+  float halo = exp(-(radius * radius) / (reach * reach)) * 0.55;
+  float breathLight = (core * 0.62 + halo) * mix(0.2, 0.52, amplitude) * mix(0.5, 1.0, swell);
+  vec3 ember = vec3(0.96, 0.62, 0.30);
+  vec3 gold = vec3(0.98, 0.84, 0.58);
+  vec3 pearl = vec3(0.86, 0.90, 0.94);
+  vec3 lightColor = progress < 0.5
+    ? mix(ember, gold, progress * 2.0)
+    : mix(gold, pearl, (progress - 0.5) * 2.0);
+  color += lightColor * breathLight;
+
+  float vignette = 1.0 - smoothstep(0.44, 0.92, radius) * 0.34;
   color *= vignette;
   color = pow(color, vec3(1.0 / 2.2));
   // A fixed display exposure keeps the field soft while retaining differences
   // between darkness, scene emission, and the live topology.
-  color *= 0.44;
+  color *= 0.52;
   outColor = vec4(color, 1.0);
 }
 `;

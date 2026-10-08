@@ -1,28 +1,28 @@
-# Stillness PWA
+# Stillness
 
-An installable, privacy-first audiovisual experience that meets the mind at its current velocity and progressively descends toward stillness.
+Breathe with the light. An installable, privacy-first reset for the minutes when the mind runs too fast: one light fills and empties with the lungs, an ocean follows it, and the pace slows to about six breaths a minute. The camera stays on the device.
 
 ## Production
 
-The prototype is evaluated at [stillness.hyperdrift.io](https://stillness.hyperdrift.io).
+[stillness.hyperdrift.io](https://stillness.hyperdrift.io). One **Begin** unlocks sound and, when allowed, on-device sensing. The session is complete without the camera.
 
-A single **Begin** gesture unlocks browser audio and, when available, on-device sensing. The experience remains complete when camera or motion access is unavailable.
+## In a session
 
-## Session controls
+`?` menu · `M` sound · `C` camera sensing · `D` live signals · `Escape` leave. The end panel reports what the light observed (breaths a minute, movement, brow) when the signal was trustworthy, and asks one question: how do you feel?
 
-Guided mode is selected by default. Uncheck it before Begin for Pure mode.
-During a session: `?` menu, `G` guidance, `M` sound, `D` live signals,
-`C` camera sensing, and `Escape` close/leave.
+## Why it works
+
+Design decision and sources: `docs/superpowers/specs/2026-10-08-breathe-with-the-light-design.md`.
 
 ## Privacy
 
-Camera and motion observations are processed on device. Raw frames and samples are never stored or transmitted. Local calibration contains aggregate session summaries only and can be cleared from the entry screen.
+Camera and motion observations are processed on device. Raw frames and samples are never stored or transmitted. Sound is generated in the browser. Local calibration keeps aggregate session summaries only.
 
-## Deploy-safety checks
+## Commands
 
 ```bash
+npm run dev
 npm run type-check
 npm run build
+npm test
 ```
-
-Stillness is a prototype in discovery. Product feedback comes from the canonical production URL; automated test investment begins only when the direction is explicitly promoted to hardening.

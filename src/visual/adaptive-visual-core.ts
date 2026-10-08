@@ -52,8 +52,7 @@ const warpUniformNames = [
   'uVariationSeed',
   'uBreathScale',
   'uReducedMotion',
-  'uAudioActive',
-  'uAudioBeat',
+  'uStillness',
 ] as const;
 
 const sceneUniformNames = [
@@ -77,6 +76,7 @@ const sceneUniformNames = [
   'uPaletteLight',
   'uPaletteConfidence',
   'uColorInfluence',
+  'uStillness',
 ] as const;
 
 const faceUniformNames = [
@@ -101,8 +101,7 @@ const faceUniformNames = [
   'uPaletteLight',
   'uPaletteConfidence',
   'uColorInfluence',
-  'uAudioActive',
-  'uAudioBeat',
+  'uStillness',
 ] as const;
 
 const blurUniformNames = [
@@ -116,11 +115,11 @@ const compositeUniformNames = [
   'uBloom',
   'uResolution',
   'uVisualIntensity',
-  'uAudioActive',
-  'uAudioEnergy',
-  'uAudioBass',
-  'uAudioBeat',
-  'uAudioHue',
+  'uBreathFullness',
+  'uBreathAmplitude',
+  'uStillness',
+  'uProgress',
+  'uReducedMotion',
 ] as const;
 
 type ProgramBinding<UniformName extends string> = {
@@ -159,11 +158,9 @@ const initialControlFrame: AdaptiveVisualControlFrame = {
   breathPhase: 0,
   breathConfidence: 0,
   coherence: 0,
-  audioActive: false,
-  audioEnergy: 0,
-  audioBass: 0,
-  audioBeat: 0,
-  audioHue: 0,
+  breathFullness: 0,
+  breathAmplitude: 0,
+  stillness: 0,
   palette: {
     shadow: [0, 0, 0],
     mid: [0.02, 0.04, 0.08],
@@ -487,14 +484,13 @@ export class AdaptiveVisualCore {
     const sceneMix = this.previousScene === this.targetScene
       ? 1
       : clamp(frame.sceneMix, 0, 1);
-    const breathConfidence = clamp(frame.breathConfidence, 0, 1);
-    const breathGate = breathConfidence > 0.35
-      ? clamp((breathConfidence - 0.35) / 0.3, 0, 1)
-      : 0;
-    const breathScale = 1
-      + Math.sin(clamp(frame.breathPhase, 0, 1) * Math.PI * 2)
-        * 0.035
-        * breathGate;
+    // The pacer's lung fullness zooms the whole field: a slow swell on the
+    // inhale and a release on the exhale that the feedback history inherits.
+    // Zoom stays under 6% so the optic flow never nears the motion-sickness
+    // band; with reduced motion the breath is luminance only.
+    const breathAmplitude = clamp(frame.breathAmplitude, 0, 1)
+      * (frame.reducedMotion ? 0 : 1);
+    const breathScale = 1 + clamp(frame.breathFullness, 0, 1) * 0.06 * breathAmplitude;
     const readTarget = resources.feedback[this.readFeedbackIndex];
     const writeTarget = resources.feedback[this.writeFeedbackIndex];
 
@@ -621,8 +617,7 @@ export class AdaptiveVisualCore {
     gl.uniform1f(uniforms.uVariationSeed, this.safeVariationSeed(frame.variationSeed));
     gl.uniform1f(uniforms.uBreathScale, breathScale);
     gl.uniform1f(uniforms.uReducedMotion, reducedMotion);
-    gl.uniform1f(uniforms.uAudioActive, frame.audioActive ? 1 : 0);
-    gl.uniform1f(uniforms.uAudioBeat, clamp(frame.audioBeat ?? 0, 0, 1));
+    gl.uniform1f(uniforms.uStillness, clamp(frame.stillness, 0, 1));
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
@@ -662,6 +657,7 @@ export class AdaptiveVisualCore {
     gl.uniform1f(uniforms.uVariationSeed, this.safeVariationSeed(frame.variationSeed));
     gl.uniform1f(uniforms.uBreathScale, breathScale);
     gl.uniform1f(uniforms.uReducedMotion, reducedMotion);
+    gl.uniform1f(uniforms.uStillness, clamp(frame.stillness, 0, 1));
     this.setScenePaletteUniforms(gl, uniforms, frame);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
@@ -732,8 +728,7 @@ export class AdaptiveVisualCore {
     );
     gl.uniform1f(uniforms.uPaletteConfidence, clamp(frame.palette.confidence, 0, 1));
     gl.uniform1f(uniforms.uColorInfluence, clamp(frame.colorInfluence, 0.15, 0.25));
-    gl.uniform1f(uniforms.uAudioActive, frame.audioActive ? 1 : 0);
-    gl.uniform1f(uniforms.uAudioBeat, clamp(frame.audioBeat ?? 0, 0, 1));
+    gl.uniform1f(uniforms.uStillness, clamp(frame.stillness, 0, 1));
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, segmentCount);
   }
 
@@ -784,11 +779,11 @@ export class AdaptiveVisualCore {
     gl.uniform1i(uniforms.uBloom, 1);
     gl.uniform2f(uniforms.uResolution, resources.width, resources.height);
     gl.uniform1f(uniforms.uVisualIntensity, clamp(frame.visualIntensity, 0.75, 1.25));
-    gl.uniform1f(uniforms.uAudioActive, frame.audioActive ? 1 : 0);
-    gl.uniform1f(uniforms.uAudioEnergy, clamp(frame.audioEnergy ?? 0, 0, 1));
-    gl.uniform1f(uniforms.uAudioBass, clamp(frame.audioBass ?? 0, 0, 1));
-    gl.uniform1f(uniforms.uAudioBeat, clamp(frame.audioBeat ?? 0, 0, 1));
-    gl.uniform1f(uniforms.uAudioHue, clamp(frame.audioHue ?? 0, 0, 1));
+    gl.uniform1f(uniforms.uBreathFullness, clamp(frame.breathFullness, 0, 1));
+    gl.uniform1f(uniforms.uBreathAmplitude, clamp(frame.breathAmplitude, 0, 1));
+    gl.uniform1f(uniforms.uStillness, clamp(frame.stillness, 0, 1));
+    gl.uniform1f(uniforms.uProgress, clamp(frame.progress, 0, 1));
+    gl.uniform1f(uniforms.uReducedMotion, frame.reducedMotion ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 

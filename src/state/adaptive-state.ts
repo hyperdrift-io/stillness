@@ -68,6 +68,12 @@ export type AdaptiveStateInput = {
   deviceMotion: { energy: number; x: number; y: number; confidence: number };
   tuning: AdaptiveTuning;
   nowMs: number;
+  /**
+   * The light's own journey (the breath pacer's arc, 0..1). Sensed evidence
+   * steers progress around it; without any evidence the journey still moves,
+   * because a person with a covered camera deserves the same reset.
+   */
+  lead: number;
 };
 
 function clampRange(value: number, minimum: number, maximum: number, fallback: number): number {
@@ -125,6 +131,10 @@ export function toVisualControlFrame(
     breathPhase: clamp01(state.breathPhase),
     breathConfidence: clamp01(state.breathConfidence),
     coherence: clamp01(state.temporalCoherence),
+    // The session controller replaces these with the live pacer each frame.
+    breathFullness: 0,
+    breathAmplitude: 0,
+    stillness: 0,
     palette: sanitizePalette(perception.palette),
     topologySegments: perception.topologySegments instanceof Float32Array
       ? perception.topologySegments

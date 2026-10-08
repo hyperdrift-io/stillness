@@ -1,4 +1,9 @@
-type StillnessEvent = 'session_started' | 'session_ended' | 'session_preference_changed';
+type StillnessEvent =
+  | 'session_started'
+  | 'session_ended'
+  | 'session_preference_changed'
+  | 'stage_reached'
+  | 'felt_state';
 
 type EventProperties = Record<string, string | boolean | number>;
 
