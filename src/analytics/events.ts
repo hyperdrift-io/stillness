@@ -2,12 +2,14 @@ type StillnessEvent = 'session_started' | 'session_ended' | 'session_preference_
 
 type EventProperties = Record<string, string | boolean | number>;
 
-declare global {
-  interface Window {
-    gtag?: (command: 'event', name: string, properties?: EventProperties) => void;
-  }
-}
+type PostHogLike = { capture: (event: string, properties?: EventProperties) => void };
 
+/** PostHog capture when the snippet is loaded; a silent no-op otherwise. Analytics never breaks the page. */
 export function trackEvent(name: StillnessEvent, properties?: EventProperties): void {
-  window.gtag?.('event', name, properties);
+  if (typeof window === 'undefined') return;
+  try {
+    (window as Window & { posthog?: PostHogLike }).posthog?.capture(name, properties);
+  } catch {
+    // ignore
+  }
 }

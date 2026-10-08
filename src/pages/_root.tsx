@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { GoogleAnalytics } from '../analytics/google-analytics.tsx';
+import { Analytics } from '../analytics/posthog.tsx';
 import { RootErrorBoundary } from '../components/root-error-boundary.tsx';
 
 type RootElementProps = { children: ReactNode };
@@ -13,7 +13,7 @@ export default async function RootElement({ children }: RootElementProps) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body>
-        <GoogleAnalytics />
+        <Analytics />
         <RootErrorBoundary>{children}</RootErrorBoundary>
       </body>
     </html>
