@@ -16,7 +16,6 @@
     "start": "waku start --port ${PORT:-8080} --host ${HOST:-127.0.0.1}",
     "type-check": "tsc --noEmit",
     "test": "node --test --experimental-strip-types tests/*.test.ts",
-    "test:browser": "npm run build && node scripts/browser-smoke.mjs",
     "typegen": "waku router typegen"
   },
   "dependencies": {
