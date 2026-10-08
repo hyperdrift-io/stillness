@@ -15,6 +15,7 @@ import {
   type PerceptionSnapshot,
 } from '../sensing/perception-signal.ts';
 import type { PerceptionModulationFrame } from '../sensing/perception-worker-protocol.ts';
+import { PulseEstimator, emptyPulseSignal, type PulseSignal } from '../sensing/pulse-estimator.ts';
 import { AdaptiveStateEngine } from '../state/adaptive-state-engine.ts';
 import {
   toVisualControlFrame,
@@ -75,6 +76,7 @@ const MIN_SUMMARY_SAMPLES = 8;
 const MIN_BREATH_SUMMARY_SAMPLES = 6;
 const FOLLOW_EMA_SECONDS = 12;
 const BREATH_TRUST = 0.35;
+const PULSE_TRUST = 0.4;
 
 const initialCalibration: CalibrationStatus = {
   phase: 'framing',
@@ -98,6 +100,8 @@ export type SessionTelemetry = {
   breathRegularity: number;
   breathConfidence: number;
   sensedBreathsPerMinute: number | null;
+  heartBeatsPerMinute: number | null;
+  heartConfidence: number;
   follow: number | null;
   facialTension: number;
   calibrationPhase: CalibrationStatus['phase'];
@@ -116,6 +120,7 @@ export type SessionSummary = {
   lightBreathsPerMinute: number;
   sensed: boolean;
   breathsPerMinute: Observation;
+  heartBeatsPerMinute: Observation;
   movement: Observation;
   tension: Observation;
 };
@@ -187,10 +192,12 @@ export class SessionController {
   private tuning: SessionTuning = { ...defaultSessionPreferences.tuning };
   private calibration: CalibrationStatus = { ...initialCalibration };
   private readonly breathSamples: SummarySample[] = [];
+  private readonly heartSamples: SummarySample[] = [];
   private readonly movementSamples: SummarySample[] = [];
   private readonly tensionSamples: SummarySample[] = [];
   private readonly calibrationController = new CalibrationController();
   private readonly breathEstimator = new BreathEstimator();
+  private readonly pulseEstimator = new PulseEstimator();
   private readonly adaptiveStateEngine = new AdaptiveStateEngine();
   private readonly pacer = new BreathPacer();
 
@@ -215,11 +222,13 @@ export class SessionController {
     this.follow = null;
     this.lastPacer = null;
     this.breathSamples.length = 0;
+    this.heartSamples.length = 0;
     this.movementSamples.length = 0;
     this.tensionSamples.length = 0;
     this.calibration = { ...initialCalibration };
     this.calibrationController.reset();
     this.breathEstimator.reset();
+    this.pulseEstimator.reset();
     this.adaptiveStateEngine.reset();
     this.pacer.reset();
 
@@ -271,6 +280,9 @@ export class SessionController {
     const breath: BreathSignal = this.cameraEnabled
       ? this.breathEstimator.update(perception)
       : { ...emptyBreathSignal };
+    const pulse: PulseSignal = this.cameraEnabled
+      ? this.pulseEstimator.update(perception)
+      : { ...emptyPulseSignal };
     const pacer = this.pacer.update(this.elapsedMs, this.updateFollow(breath, now));
     this.lastPacer = pacer;
 
@@ -317,9 +329,9 @@ export class SessionController {
     }
     this.dependencies.renderer.update(frame);
 
-    this.sampleSummary(perception, breath, adaptive);
+    this.sampleSummary(perception, breath, pulse, adaptive);
     if (now - this.lastTelemetryAt >= TELEMETRY_INTERVAL_MS || this.lastTelemetryAt === -Infinity) {
-      this.dependencies.onTelemetry?.(this.telemetryFor(adaptive, perception, motion, breath, pacer));
+      this.dependencies.onTelemetry?.(this.telemetryFor(adaptive, perception, motion, breath, pulse, pacer));
       this.lastTelemetryAt = now;
     }
 
@@ -342,14 +354,19 @@ export class SessionController {
   summary(): SessionSummary {
     const elapsedMs = this.elapsedMs;
     const breathsPerMinute = windowMean(this.breathSamples, elapsedMs, MIN_BREATH_SUMMARY_SAMPLES);
+    const heartBeatsPerMinute = windowMean(this.heartSamples, elapsedMs, MIN_BREATH_SUMMARY_SAMPLES);
     const movement = windowMean(this.movementSamples, elapsedMs, MIN_SUMMARY_SAMPLES);
     const tension = windowMean(this.tensionSamples, elapsedMs, MIN_SUMMARY_SAMPLES);
     return {
       elapsedSeconds: Math.round(elapsedMs / 1_000),
       stage: this.lastPacer?.stage ?? 'arrive',
       lightBreathsPerMinute: this.lastPacer?.breathsPerMinute ?? 0,
-      sensed: breathsPerMinute.end !== null || movement.end !== null || tension.end !== null,
+      sensed: breathsPerMinute.end !== null
+        || heartBeatsPerMinute.end !== null
+        || movement.end !== null
+        || tension.end !== null,
       breathsPerMinute,
+      heartBeatsPerMinute,
       movement,
       tension,
     };
@@ -369,6 +386,7 @@ export class SessionController {
     if (enabled) {
       this.calibrationController.reset();
       this.breathEstimator.reset();
+      this.pulseEstimator.reset();
       this.calibration = { ...initialCalibration };
       return this.startCamera(cameraOperation).then((started) => {
         if (cameraOperation !== this.cameraOperation) return false;
@@ -381,6 +399,7 @@ export class SessionController {
     }
     this.dependencies.camera.stop();
     this.breathEstimator.reset();
+    this.pulseEstimator.reset();
     this.calibration = limitedCalibration(this.calibration);
     return Promise.resolve(true);
   }
@@ -463,12 +482,20 @@ export class SessionController {
     return this.follow;
   }
 
-  private sampleSummary(perception: PerceptionSnapshot, breath: BreathSignal, state: AdaptiveState): void {
+  private sampleSummary(
+    perception: PerceptionSnapshot,
+    breath: BreathSignal,
+    pulse: PulseSignal,
+    state: AdaptiveState,
+  ): void {
     if (this.elapsedMs - this.lastSummarySampleAt < SUMMARY_SAMPLE_INTERVAL_MS) return;
     this.lastSummarySampleAt = this.elapsedMs;
     const atMs = this.elapsedMs;
     if (breath.confidence >= BREATH_TRUST && breath.intervalMs > 0) {
       this.breathSamples.push({ atMs, value: 60_000 / breath.intervalMs });
+    }
+    if (pulse.confidence >= PULSE_TRUST && pulse.beatsPerMinute !== null) {
+      this.heartSamples.push({ atMs, value: pulse.beatsPerMinute });
     }
     if (state.overallConfidence > 0.2) {
       this.movementSamples.push({ atMs, value: clamp01(state.movementEnergy) });
@@ -483,6 +510,7 @@ export class SessionController {
     perception: PerceptionSnapshot,
     motion: MotionObservation,
     breath: BreathSignal,
+    pulse: PulseSignal,
     pacer: PacerState,
   ): SessionTelemetry {
     const source: SessionTelemetry['source'] = perception.facePresent
@@ -504,6 +532,8 @@ export class SessionController {
       sensedBreathsPerMinute: breath.confidence >= BREATH_TRUST && breath.intervalMs > 0
         ? 60_000 / breath.intervalMs
         : null,
+      heartBeatsPerMinute: pulse.confidence >= PULSE_TRUST ? pulse.beatsPerMinute : null,
+      heartConfidence: clamp01(pulse.confidence),
       follow: this.follow,
       facialTension: clamp01(state.facialTension),
       calibrationPhase: this.calibration.phase,

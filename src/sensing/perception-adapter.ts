@@ -28,6 +28,12 @@ function cloneSnapshot(snapshot: PerceptionSnapshot): PerceptionSnapshot {
       mid: [...snapshot.palette.mid],
       light: [...snapshot.palette.light],
     },
+    pulse: {
+      ...snapshot.pulse,
+      forehead: [...snapshot.pulse.forehead],
+      leftCheek: [...snapshot.pulse.leftCheek],
+      rightCheek: [...snapshot.pulse.rightCheek],
+    },
     topologySegments: snapshot.topologySegments.slice(),
   };
 }

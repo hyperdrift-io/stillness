@@ -8,7 +8,7 @@ Breathe with the light. An installable, privacy-first reset for the minutes when
 
 ## In a session
 
-`?` menu · `M` sound · `C` camera sensing · `D` live signals · `Escape` leave. The end panel reports what the light observed (breaths a minute, movement, brow) when the signal was trustworthy, and asks one question: how do you feel?
+`?` menu · `M` sound · `C` camera sensing · `D` live signals · `Escape` leave. The end panel reports what the light observed (breaths a minute, heart beats a minute, movement, brow) when the signal was trustworthy, and asks one question: how do you feel?
 
 ## Why it works
 

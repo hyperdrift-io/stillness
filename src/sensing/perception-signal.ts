@@ -29,6 +29,16 @@ export type CameraPalette = {
   confidence: number;
 };
 
+/** Mean RGB (0..1) over a skin region of the current frame; the pulse estimator reads the time series. */
+export type SkinSample = readonly [number, number, number];
+
+export type PulseSample = {
+  sampled: boolean;
+  forehead: SkinSample;
+  leftCheek: SkinSample;
+  rightCheek: SkinSample;
+};
+
 export type PerceptionConfidence = {
   face: number;
   shoulders: number;
@@ -51,6 +61,7 @@ export type PerceptionSnapshot = {
   shoulders: ShoulderPose;
   luminance: number;
   palette: CameraPalette;
+  pulse: PulseSample;
   topologySegments: Float32Array;
   quality: number;
 };
@@ -92,6 +103,12 @@ export const initialPerceptionSnapshot: PerceptionSnapshot = {
     mid: [0.02, 0.04, 0.08],
     light: [0.08, 0.14, 0.22],
     confidence: 0,
+  },
+  pulse: {
+    sampled: false,
+    forehead: [0, 0, 0],
+    leftCheek: [0, 0, 0],
+    rightCheek: [0, 0, 0],
   },
   topologySegments: new Float32Array(),
   quality: 0,

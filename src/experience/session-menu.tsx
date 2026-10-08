@@ -50,6 +50,10 @@ export function expressionLabel(value: number): 'soft' | 'moving' | 'active' {
   return 'active';
 }
 
+export function pulseLabel(beatsPerMinute: number | null): string {
+  return beatsPerMinute === null ? 'learning' : `${Math.round(beatsPerMinute)} a minute`;
+}
+
 export function breathingLabel(
   sensedBreathsPerMinute: number | null,
   lightBreathsPerMinute: number,
@@ -100,6 +104,7 @@ export function SessionMenu({
       ['expression', 'Expression signals', telemetry.expressionActivity, expressionLabel(telemetry.expressionActivity)],
       ['softening', 'Facial softening', 1 - telemetry.facialTension, steadinessLabel(1 - telemetry.facialTension)],
       ['breathing', 'Breathing', telemetry.breathConfidence, breathingLabel(telemetry.sensedBreathsPerMinute, telemetry.pacer.breathsPerMinute)],
+      ['pulse', 'Pulse', telemetry.heartConfidence, pulseLabel(telemetry.heartBeatsPerMinute)],
       ['presence', 'Face signal', telemetry.presence, presenceLabel(telemetry.presence, telemetry.source)],
     ] as const
     : [];

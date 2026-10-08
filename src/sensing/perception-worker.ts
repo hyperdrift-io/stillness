@@ -15,7 +15,9 @@ import type {
   CameraPalette,
   FacialPattern,
   PerceptionSnapshot,
+  PulseSample,
   ShoulderPose,
+  SkinSample,
   SpatialMotion,
 } from './perception-signal.ts';
 import type {
@@ -25,6 +27,16 @@ import type {
 
 const ANALYSIS_WIDTH = 80;
 const ANALYSIS_HEIGHT = 60;
+const SKIN_PATCH = 24;
+// MediaPipe face mesh indices: 10 top of forehead, 9 glabella, 151 forehead
+// centre, 234 and 454 the face's outer edges, 50 and 280 the cheekbones.
+const FOREHEAD_TOP = 10;
+const GLABELLA = 9;
+const FOREHEAD_CENTRE = 151;
+const LEFT_FACE_EDGE = 234;
+const RIGHT_FACE_EDGE = 454;
+const LEFT_CHEEK = 50;
+const RIGHT_CHEEK = 280;
 const LEFT_SHOULDER_INDEX = 11;
 const RIGHT_SHOULDER_INDEX = 12;
 const MIN_CONFIDENCE = 0.5;
@@ -65,6 +77,14 @@ type FaceFeatures = Pick<
 const workerScope = globalThis as unknown as WorkerScope;
 const analysisCanvas = new OffscreenCanvas(ANALYSIS_WIDTH, ANALYSIS_HEIGHT);
 const analysisContext = analysisCanvas.getContext('2d', { willReadFrequently: true });
+const skinCanvas = new OffscreenCanvas(SKIN_PATCH, SKIN_PATCH);
+const skinContext = skinCanvas.getContext('2d', { willReadFrequently: true });
+const noPulse: PulseSample = {
+  sampled: false,
+  forehead: [0, 0, 0],
+  leftCheek: [0, 0, 0],
+  rightCheek: [0, 0, 0],
+};
 const connections = faceLandmarkConnections();
 
 let faceLandmarker: FaceLandmarker | null = null;
@@ -349,6 +369,85 @@ function analyseFace(result: FaceLandmarkerResult): FaceFeatures {
   };
 }
 
+type Landmark = { x: number; y: number };
+
+function meanSkin(
+  frame: ImageBitmap,
+  centreX: number,
+  centreY: number,
+  width: number,
+  height: number,
+): SkinSample | null {
+  if (!skinContext) return null;
+  const sourceWidth = Math.max(2, Math.round(width * frame.width));
+  const sourceHeight = Math.max(2, Math.round(height * frame.height));
+  const sourceX = Math.round(centreX * frame.width - sourceWidth / 2);
+  const sourceY = Math.round(centreY * frame.height - sourceHeight / 2);
+  if (
+    sourceX < 0 || sourceY < 0
+    || sourceX + sourceWidth > frame.width
+    || sourceY + sourceHeight > frame.height
+  ) return null;
+  skinContext.imageSmoothingEnabled = true;
+  skinContext.imageSmoothingQuality = 'high';
+  skinContext.drawImage(
+    frame,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    SKIN_PATCH,
+    SKIN_PATCH,
+  );
+  const pixels = skinContext.getImageData(0, 0, SKIN_PATCH, SKIN_PATCH).data;
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+  const count = SKIN_PATCH * SKIN_PATCH;
+  for (let index = 0; index < pixels.length; index += 4) {
+    red += pixels[index] ?? 0;
+    green += pixels[index + 1] ?? 0;
+    blue += pixels[index + 2] ?? 0;
+  }
+  return [red / count / 255, green / count / 255, blue / count / 255];
+}
+
+/**
+ * Mean colour of three skin regions, the raw material for remote
+ * photoplethysmography. Only three averaged colours leave the worker;
+ * the frame itself never does.
+ */
+function samplePulse(frame: ImageBitmap, landmarks: readonly Landmark[]): PulseSample {
+  const top = landmarks[FOREHEAD_TOP];
+  const glabella = landmarks[GLABELLA];
+  const centre = landmarks[FOREHEAD_CENTRE];
+  const leftEdge = landmarks[LEFT_FACE_EDGE];
+  const rightEdge = landmarks[RIGHT_FACE_EDGE];
+  const leftCheek = landmarks[LEFT_CHEEK];
+  const rightCheek = landmarks[RIGHT_CHEEK];
+  if (!top || !glabella || !centre || !leftEdge || !rightEdge || !leftCheek || !rightCheek) {
+    return noPulse;
+  }
+  const faceWidth = Math.abs(rightEdge.x - leftEdge.x);
+  const foreheadHeight = Math.abs(glabella.y - top.y);
+  if (faceWidth < 0.08 || foreheadHeight < 0.02) return noPulse;
+  const aspect = frame.width / Math.max(1, frame.height);
+  const forehead = meanSkin(
+    frame,
+    centre.x,
+    top.y + foreheadHeight * 0.52,
+    faceWidth * 0.3,
+    foreheadHeight * 0.55 * aspect,
+  );
+  const cheekSize = faceWidth * 0.13;
+  const left = meanSkin(frame, leftCheek.x, leftCheek.y, cheekSize, cheekSize * aspect);
+  const right = meanSkin(frame, rightCheek.x, rightCheek.y, cheekSize, cheekSize * aspect);
+  if (!forehead || !left || !right) return noPulse;
+  return { sampled: true, forehead, leftCheek: left, rightCheek: right };
+}
+
 function analyseShoulders(result: PoseLandmarkerResult): ShoulderPose {
   const landmarks = result.landmarks[0];
   const left = landmarks?.[LEFT_SHOULDER_INDEX];
@@ -464,6 +563,10 @@ function analyse(frame: ImageBitmap, timestampMs: number): {
   try {
     const face = analyseFace(faceResult);
     const shoulders = analyseShoulders(poseResult);
+    const faceLandmarks = faceResult.faceLandmarks[0];
+    const pulse = face.facePresent && faceLandmarks
+      ? samplePulse(frame, faceLandmarks)
+      : noPulse;
     const modulation = createModulation(frameFeatures, face, shoulders);
     previousLuminance = frameFeatures.luminance;
     const quality = clamp01(
@@ -478,6 +581,7 @@ function analyse(frame: ImageBitmap, timestampMs: number): {
         shoulders,
         luminance: frameFeatures.meanLuminance,
         palette: frameFeatures.palette,
+        pulse,
         quality,
       },
       modulation,

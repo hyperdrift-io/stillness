@@ -40,6 +40,16 @@ export function observationLines(summary: SessionSummary): string[] {
       lines.push(`Your breathing held near ${end} a minute.`);
     }
   }
+  const heart = summary.heartBeatsPerMinute;
+  if (heart.start !== null && heart.end !== null) {
+    const start = roundRate(heart.start);
+    const end = roundRate(heart.end);
+    if (end <= start - 2) {
+      lines.push(`Your heart slowed from ${start} to ${end} a minute.`);
+    } else {
+      lines.push(`Your heart held near ${end} a minute.`);
+    }
+  }
   const movement = summary.movement;
   if (movement.start !== null && movement.end !== null) {
     if (movement.end < movement.start * 0.75) lines.push('Your movement settled.');

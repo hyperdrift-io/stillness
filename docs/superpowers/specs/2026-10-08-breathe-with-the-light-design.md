@@ -34,6 +34,7 @@ The camera never judges. With a trustworthy breath signal it speeds the glide wh
 ## What the camera is for now
 
 - Breath rate (shoulders and head from on-device landmarks): adapts the glide and reports "your breathing slowed from 15 to 6 a minute" at the end.
+- Heart rate by remote photoplethysmography (`src/sensing/pulse-estimator.ts`): the worker averages the skin colour of the forehead and both cheeks each frame; the estimator resamples 16 s of history at 20 Hz, applies the plane-orthogonal-to-skin projection (Wang et al. 2017), and reads the spectral peak between 42 and 240 beats a minute. A signal-to-noise gate (confidence from the peak's share of the band) decides whether a rate exists at all; weak signal means no number, never a guess. Reports "your heart slowed from 84 to 66 a minute". Known limits from the brief: 4–5 bpm error on consumer webcams, worse in dim rooms and on the darkest skin tones, so it is proof of a trend, not a diagnosis.
 - Movement energy and facial tension (brow down, squint, jaw press): shape the field's texture and warmth live, and report "movement settled" / "brow softened" at the end, only when the signal was trustworthy.
 - Face topology: the constellation in the first stages, which dissolves into the light as stillness arrives.
 - Raw frames never leave the device; only bounded aggregates are kept for calibration.
@@ -61,4 +62,6 @@ PostHog events: `session_started` (sound, camera), `stage_reached` (stage, elaps
 
 ## Next
 
-Remote photoplethysmography (heart rate from the webcam, POS algorithm on forehead and cheek regions) so the end panel can also say "your heart slowed from 84 to 66", gated on signal confidence. Not shipped in this round.
+- Validate the heart-rate estimate against a reference (a watch or a finger oximeter) on a few real sessions and lighting conditions; the unit test proves the algorithm on a synthetic pulse, not the camera path.
+- PostHog experiment, one layer at a time (pacer alone, pacer + light, pacer + light + sound), read through the felt-state tap and the sensed deltas.
+- Run the PEAT photosensitivity analyser on a recorded session of each visual family before promoting the app to hardening.

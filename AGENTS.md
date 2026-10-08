@@ -19,7 +19,7 @@ Pillars:
 - **The person arrives as a constellation and leaves as light.** The face topology drives the mirror in the early stages and dissolves as stillness rises. Five scenes remain the journey language: Turbulence, Gathering, Coherence, Release, Radiance.
 - **Nothing flickers.** The light cycles every five to eleven seconds; no beat-reactive or onset-driven visuals; `prefers-reduced-motion` lowers amplitude and warp.
 - **Sound is generated here**, on by default, thinning toward silence. No streams, no frequency claims.
-- **Observations, not scores.** The end panel reports plain measurements (breaths a minute, movement, brow) only when the signal was trustworthy, strengths first. Never a composite score, emotion label, diagnosis, streak or achievement.
+- **Observations, not scores.** The end panel reports plain measurements (breaths a minute, heart beats a minute from on-device remote photoplethysmography, movement, brow) only when the signal clears its confidence gate, strengths first. Never a composite score, emotion label, diagnosis, streak or achievement.
 
 ## Product rules
 
@@ -35,7 +35,7 @@ Pillars:
 
 - Waku server component shell; one `StillnessExperience` client island.
 - Browser-native WebGL2, Web Audio, Media Capture, Device Motion, IndexedDB, and Service Worker APIs.
-- Pure TypeScript domain modules between sensors and the renderer: `breath-pacer` (the lead), `breath-soundscape` (Web Audio), `session-controller` (orchestration and the session summary), `adaptive-state-engine` (evidence), `adaptive-visual-core` + shaders (one persistent WebGL2 feedback field).
+- Pure TypeScript domain modules between sensors and the renderer: `breath-pacer` (the lead), `breath-soundscape` (Web Audio), `session-controller` (orchestration and the session summary), `breath-estimator` and `pulse-estimator` (breath from shoulders, heart rate from skin colour), `adaptive-state-engine` (evidence), `adaptive-visual-core` + shaders (one persistent WebGL2 feedback field).
 - Semantic CSS only. No Tailwind, utility chains, inline presentation styles, or CSS-in-JS.
 - MediaPipe Tasks Vision runs in `src/sensing/perception-worker.ts` off the main thread; session state and renderers consume normalized signals only.
 

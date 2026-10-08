@@ -165,6 +165,8 @@ export function StillnessExperience() {
         sensed: sessionSummary.sensed,
         breath_start: sessionSummary.breathsPerMinute.start ?? -1,
         breath_end: sessionSummary.breathsPerMinute.end ?? -1,
+        heart_start: sessionSummary.heartBeatsPerMinute.start ?? -1,
+        heart_end: sessionSummary.heartBeatsPerMinute.end ?? -1,
         movement_start: sessionSummary.movement.start ?? -1,
         movement_end: sessionSummary.movement.end ?? -1,
         tension_start: sessionSummary.tension.start ?? -1,
