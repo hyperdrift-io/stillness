@@ -42,6 +42,7 @@ uniform vec2 uMovementDirection;
 uniform float uMovementEnergy;
 uniform float uTime;
 uniform float uDeltaScale;
+uniform float uDecayScale;
 uniform float uPreviousScene;
 uniform float uTargetScene;
 uniform float uSceneMix;
@@ -145,18 +146,28 @@ void main() {
   vec2 movement = uMovementDirection
     * clamp(uMovementEnergy, 0.0, 1.0)
     * (0.0015 + warp * 0.17);
+  // Displacement is per second, not per frame, and small: at 60 Hz the
+  // history must drift slowly enough that trails stay as lines instead of
+  // smearing into fog. Tuned against 60 fps captures, not a throttled tab.
   vec2 displacement = (
     curl * warp * (0.16 + modulation.r * 0.34 + modulation.g * 0.48)
     + modulationGradient * warp * influence * 1.8
     + movement
-  ) * motionAllowance;
+  ) * motionAllowance * 0.03 * clamp(uDeltaScale, 0.0, 4.0);
 
   vec2 sampleUv = clamp(centered + 0.5 - displacement, vec2(0.001), vec2(0.999));
   vec3 history = texture(uFeedback, sampleUv).rgb;
   // Stillness lets the trails go: history fades faster, the field empties.
   float settledDecay = mix(decay, 0.905, clamp(uStillness, 0.0, 1.0));
-  float frameDecay = pow(settledDecay, max(uDeltaScale, 0.0));
-  outColor = vec4(history * frameDecay, 1.0);
+  // Decay follows the true elapsed time (up to a second) so a slow device or
+  // a throttled tab fades its trails per second like a 60 Hz display; motion
+  // and emission stay capped so a long frame never jumps.
+  float frameDecay = pow(settledDecay, max(uDecayScale, 0.0));
+  // On devices without float colour buffers the history lives in 8 bits and
+  // a pure multiply never reaches black; the small subtraction guarantees
+  // that trails fade all the way out instead of leaving a grey wash.
+  vec3 faded = max(history * frameDecay - vec3(0.0012 * max(uDeltaScale, 0.0)), vec3(0.0));
+  outColor = vec4(faded, 1.0);
 }
 `;
 
@@ -187,6 +198,7 @@ uniform vec3 uPaletteLight;
 uniform float uPaletteConfidence;
 uniform float uColorInfluence;
 uniform float uStillness;
+uniform float uHueShift;
 
 in vec2 vUv;
 out vec4 outColor;
@@ -195,6 +207,35 @@ float hash21(vec2 value) {
   value = fract(value * vec2(123.34, 456.21));
   value += dot(value, value + 45.32);
   return fract(value.x * value.y);
+}
+
+// A cosine palette (Quilez): smooth, periodic, never a flash.
+vec3 cosinePalette(float t, vec3 a, vec3 b, vec3 d) {
+  return a + b * cos(TAU * (t + d));
+}
+
+// Each scene owns a spectrum. The tint turns slowly with the session and
+// sways a little with each breath, and it varies around and out from the
+// centre so trails carry several hues at once.
+vec3 sceneSpectrum(float scene, vec2 point) {
+  // Continuous around the centre (no seam where the angle wraps), so the
+  // hue turns like weather rather than splitting the screen.
+  float angle = atan(point.y, point.x);
+  float radius = length(point);
+  float t = uHueShift + cos(angle) * 0.16 + sin(angle * 2.0 + uHueShift * TAU) * 0.08 + radius * 0.22;
+  if (scene < 0.5) {
+    return cosinePalette(t, vec3(0.58, 0.22, 0.44), vec3(0.42, 0.24, 0.4), vec3(0.0, 0.12, 0.4));
+  }
+  if (scene < 1.5) {
+    return cosinePalette(t, vec3(0.6, 0.38, 0.42), vec3(0.4, 0.3, 0.46), vec3(0.0, 0.12, 0.45));
+  }
+  if (scene < 2.5) {
+    return cosinePalette(t, vec3(0.52, 0.46, 0.58), vec3(0.44, 0.36, 0.4), vec3(0.06, 0.3, 0.62));
+  }
+  if (scene < 3.5) {
+    return cosinePalette(t, vec3(0.34, 0.56, 0.58), vec3(0.42, 0.36, 0.42), vec3(0.42, 0.14, 0.58));
+  }
+  return cosinePalette(t, vec3(0.7, 0.7, 0.76), vec3(0.26, 0.22, 0.26), vec3(0.1, 0.36, 0.62));
 }
 
 float noise21(vec2 point) {
@@ -412,6 +453,15 @@ void main() {
   vec3 target = sceneGrammar(uTargetScene, point, time);
   float mixAmount = smoothstep(0.0, 1.0, clamp(uSceneMix, 0.0, 1.0));
   vec3 emission = mix(previous, target, mixAmount);
+
+  // Keep the grammar's light, give it the scene's living spectrum.
+  vec3 spectrum = mix(
+    sceneSpectrum(uPreviousScene, point),
+    sceneSpectrum(uTargetScene, point),
+    mixAmount
+  );
+  float emissionLuminance = dot(emission, vec3(0.2126, 0.7152, 0.0722));
+  emission = mix(emission, spectrum * emissionLuminance * 0.95, 0.85);
 
   // Variation changes geometry while preserving the state-led palette and meaning.
   float variation = 0.96 + 0.08 * noise21(
@@ -652,9 +702,25 @@ uniform float uBreathAmplitude;
 uniform float uStillness;
 uniform float uProgress;
 uniform float uReducedMotion;
+uniform float uHueShift;
 
 in vec2 vUv;
 out vec4 outColor;
+
+// The breath light moves between a warm pole on the inhale and a cool pole
+// on the exhale; the pair travels with the journey from ember to pearl.
+vec3 breathPole(float progress, float warm) {
+  vec3 warmEarly = vec3(0.98, 0.56, 0.3);
+  vec3 coolEarly = vec3(0.78, 0.36, 0.72);
+  vec3 warmMid = vec3(0.98, 0.84, 0.5);
+  vec3 coolMid = vec3(0.46, 0.62, 0.98);
+  vec3 warmLate = vec3(0.96, 0.9, 0.84);
+  vec3 coolLate = vec3(0.58, 0.9, 0.92);
+  vec3 early = mix(coolEarly, warmEarly, warm);
+  vec3 mid = mix(coolMid, warmMid, warm);
+  vec3 late = mix(coolLate, warmLate, warm);
+  return progress < 0.5 ? mix(early, mid, progress * 2.0) : mix(mid, late, (progress - 0.5) * 2.0);
+}
 
 vec3 acesApproximation(vec3 color) {
   const float a = 2.51;
@@ -673,9 +739,10 @@ void main() {
   // Preserve local contrast: soften chroma without normalising every bright
   // pixel to the same luminance, which previously flattened the face into fog.
   float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
-  color = mix(vec3(luminance), color, 0.84);
-  color = max(color - vec3(0.012), vec3(0.0));
-  color = acesApproximation(color * clamp(uVisualIntensity, 0.75, 1.25) * 0.82);
+  // Deep rather than pastel: more chroma, less exposure, a lifted black.
+  color = max(mix(vec3(luminance), color, 1.4), vec3(0.0));
+  color = max(color - vec3(0.02), vec3(0.0));
+  color = acesApproximation(color * clamp(uVisualIntensity, 0.75, 1.25) * 0.5);
 
   float aspect = uResolution.x / max(uResolution.y, 1.0);
   vec2 point = vec2((vUv.x - 0.5) * aspect, vUv.y - 0.5);
@@ -694,21 +761,23 @@ void main() {
   float reach = mix(0.2, 0.44, fullness * motionAllowance) * mix(1.0, 0.72, stillness);
   float core = exp(-(radius * radius) / (reach * reach * 0.18));
   float halo = exp(-(radius * radius) / (reach * reach)) * 0.55;
-  float breathLight = (core * 0.62 + halo) * mix(0.2, 0.52, amplitude) * mix(0.5, 1.0, swell);
-  vec3 ember = vec3(0.96, 0.62, 0.30);
-  vec3 gold = vec3(0.98, 0.84, 0.58);
-  vec3 pearl = vec3(0.86, 0.90, 0.94);
-  vec3 lightColor = progress < 0.5
-    ? mix(ember, gold, progress * 2.0)
-    : mix(gold, pearl, (progress - 0.5) * 2.0);
-  color += lightColor * breathLight;
+  float breathLight = (core * 0.62 + halo) * mix(0.18, 0.44, amplitude) * mix(0.5, 1.0, swell);
+  // Which pole the inhale favours drifts slowly with the spectrum cycle, so
+  // no two minutes of light are quite the same.
+  float swap = (0.5 + 0.5 * sin(uHueShift * 6.283185307179586)) * 0.35;
+  float warmth = mix(smoothstep(0.0, 1.0, fullness), 1.0 - smoothstep(0.0, 1.0, fullness), swap);
+  vec3 lightColor = breathPole(progress, warmth);
+  // A faint rim of the opposite pole keeps the halo two-toned.
+  vec3 rimColor = breathPole(progress, 1.0 - warmth);
+  float rim = smoothstep(reach * 0.5, reach * 1.6, radius) * (1.0 - smoothstep(reach * 1.6, reach * 3.2, radius));
+  color += lightColor * breathLight + rimColor * rim * 0.05 * amplitude;
 
-  float vignette = 1.0 - smoothstep(0.44, 0.92, radius) * 0.34;
+  float vignette = 1.0 - smoothstep(0.36, 0.95, radius) * 0.6;
   color *= vignette;
   color = pow(color, vec3(1.0 / 2.2));
   // A fixed display exposure keeps the field soft while retaining differences
   // between darkness, scene emission, and the live topology.
-  color *= 0.52;
+  color *= 0.58;
   outColor = vec4(color, 1.0);
 }
 `;

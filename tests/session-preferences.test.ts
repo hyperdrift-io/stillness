@@ -13,7 +13,7 @@ test('a session starts with sound and camera on and the signal panel closed', ()
     liveSignals: false,
     tuning: {
       signalSensitivity: 1,
-      colorInfluence: 0.2,
+      colorInfluence: 0.15,
       transitionSeconds: 4.5,
       visualIntensity: 1,
       quality: 'auto',

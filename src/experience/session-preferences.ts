@@ -19,7 +19,7 @@ export const defaultSessionPreferences: SessionPreferences = Object.freeze({
   liveSignals: false,
   tuning: {
     signalSensitivity: 1,
-    colorInfluence: 0.2,
+    colorInfluence: 0.15,
     transitionSeconds: 4.5,
     visualIntensity: 1,
     quality: 'auto' as const,

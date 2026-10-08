@@ -22,6 +22,12 @@ import {
   type RenderTarget,
 } from './webgl-resources.ts';
 
+// One turn of the spectrum per 72 s, plus a small sway with each breath:
+// slow enough to be felt as weather, never as a flash.
+const HUE_CYCLE_SECONDS = 72;
+const HUE_BREATH_SWAY = 0.05;
+const SCENE_CLOCK = 0.22;
+
 const SCENE_INDEX: Readonly<Record<AdaptiveScene, number>> = {
   turbulence: 0,
   gathering: 1,
@@ -46,6 +52,7 @@ const warpUniformNames = [
   'uMovementEnergy',
   'uTime',
   'uDeltaScale',
+  'uDecayScale',
   'uPreviousScene',
   'uTargetScene',
   'uSceneMix',
@@ -77,6 +84,7 @@ const sceneUniformNames = [
   'uPaletteConfidence',
   'uColorInfluence',
   'uStillness',
+  'uHueShift',
 ] as const;
 
 const faceUniformNames = [
@@ -120,6 +128,7 @@ const compositeUniformNames = [
   'uStillness',
   'uProgress',
   'uReducedMotion',
+  'uHueShift',
 ] as const;
 
 type ProgramBinding<UniformName extends string> = {
@@ -310,6 +319,7 @@ export class AdaptiveVisualCore {
   private lastNowMs: number | null = null;
   private timeOriginMs: number | null = null;
   private smoothedFrameTimeMs = 0;
+  private hueShift = 0;
   private metrics: RendererMetrics = {
     fps: 0,
     frameTimeMs: 0,
@@ -467,9 +477,10 @@ export class AdaptiveVisualCore {
       throw new Error('The adaptive visual WebGL2 context is lost.');
     }
 
-    const rawFrameTimeMs = this.lastNowMs === null
+    const trueFrameTimeMs = this.lastNowMs === null
       ? 1_000 / 60
-      : clamp(nowMs - this.lastNowMs, 1, 100);
+      : clamp(nowMs - this.lastNowMs, 1, 1_000);
+    const rawFrameTimeMs = Math.min(trueFrameTimeMs, 100);
     this.lastNowMs = nowMs;
     this.timeOriginMs ??= nowMs;
     this.smoothedFrameTimeMs = this.smoothedFrameTimeMs === 0
@@ -477,10 +488,15 @@ export class AdaptiveVisualCore {
       : this.smoothedFrameTimeMs * 0.9 + rawFrameTimeMs * 0.1;
 
     const deltaScale = rawFrameTimeMs / (1_000 / 60);
+    const decayScale = trueFrameTimeMs / (1_000 / 60);
     const frame = this.frame;
     const reducedMotion = frame.reducedMotion ? 1 : 0;
     const elapsedSeconds = Math.max(0, nowMs - this.timeOriginMs) / 1_000;
     const shaderTime = elapsedSeconds * (frame.reducedMotion ? 0.16 : 1);
+    // The scene grammar's clock runs slowly: at 60 fps the feedback history
+    // integrates about a second of emission, and patterns that sweep faster
+    // than that blur into fog. Slow patterns leave trails instead.
+    const sceneTime = shaderTime * SCENE_CLOCK;
     const sceneMix = this.previousScene === this.targetScene
       ? 1
       : clamp(frame.sceneMix, 0, 1);
@@ -491,6 +507,9 @@ export class AdaptiveVisualCore {
     const breathAmplitude = clamp(frame.breathAmplitude, 0, 1)
       * (frame.reducedMotion ? 0 : 1);
     const breathScale = 1 + clamp(frame.breathFullness, 0, 1) * 0.06 * breathAmplitude;
+    const hueShift = ((elapsedSeconds * (frame.reducedMotion ? 0.5 : 1)) / HUE_CYCLE_SECONDS) % 1
+      + (clamp(frame.breathFullness, 0, 1) - 0.5) * HUE_BREATH_SWAY;
+    this.hueShift = hueShift;
     const readTarget = resources.feedback[this.readFeedbackIndex];
     const writeTarget = resources.feedback[this.writeFeedbackIndex];
 
@@ -504,6 +523,7 @@ export class AdaptiveVisualCore {
         frame,
         shaderTime,
         deltaScale,
+        decayScale,
         sceneMix,
         breathScale,
         reducedMotion,
@@ -514,7 +534,7 @@ export class AdaptiveVisualCore {
         programs,
         writeTarget,
         frame,
-        shaderTime,
+        sceneTime,
         deltaScale,
         sceneMix,
         breathScale,
@@ -588,6 +608,7 @@ export class AdaptiveVisualCore {
     frame: AdaptiveVisualControlFrame,
     shaderTime: number,
     deltaScale: number,
+    decayScale: number,
     sceneMix: number,
     breathScale: number,
     reducedMotion: number,
@@ -611,6 +632,7 @@ export class AdaptiveVisualCore {
     gl.uniform1f(uniforms.uMovementEnergy, clamp(frame.movementEnergy, 0, 1));
     gl.uniform1f(uniforms.uTime, shaderTime);
     gl.uniform1f(uniforms.uDeltaScale, deltaScale);
+    gl.uniform1f(uniforms.uDecayScale, decayScale);
     gl.uniform1f(uniforms.uPreviousScene, SCENE_INDEX[this.previousScene]);
     gl.uniform1f(uniforms.uTargetScene, SCENE_INDEX[this.targetScene]);
     gl.uniform1f(uniforms.uSceneMix, sceneMix);
@@ -658,6 +680,7 @@ export class AdaptiveVisualCore {
     gl.uniform1f(uniforms.uBreathScale, breathScale);
     gl.uniform1f(uniforms.uReducedMotion, reducedMotion);
     gl.uniform1f(uniforms.uStillness, clamp(frame.stillness, 0, 1));
+    gl.uniform1f(uniforms.uHueShift, this.hueShift);
     this.setScenePaletteUniforms(gl, uniforms, frame);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
@@ -784,6 +807,7 @@ export class AdaptiveVisualCore {
     gl.uniform1f(uniforms.uStillness, clamp(frame.stillness, 0, 1));
     gl.uniform1f(uniforms.uProgress, clamp(frame.progress, 0, 1));
     gl.uniform1f(uniforms.uReducedMotion, frame.reducedMotion ? 1 : 0);
+    gl.uniform1f(uniforms.uHueShift, this.hueShift);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 

@@ -11,6 +11,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
         name="description"
         content="A few minutes of light and sound that slow your breath to a calm pace. Private: the camera stays on your device."
       />
+      <meta name="google-site-verification" content="50RQLkfM1jREfOFhOOZg22V_67yRE_6LhaqpmwJ4jm0" />
       <meta name="theme-color" content="#061a1f" />
       <meta name="color-scheme" content="dark" />
       <meta property="og:type" content="website" />

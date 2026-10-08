@@ -3,7 +3,8 @@ type StillnessEvent =
   | 'session_ended'
   | 'session_preference_changed'
   | 'stage_reached'
-  | 'felt_state';
+  | 'felt_state'
+  | 'shared';
 
 type EventProperties = Record<string, string | boolean | number>;
 

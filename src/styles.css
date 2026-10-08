@@ -306,10 +306,10 @@
     border-color: var(--color-ember-bright);
     background: rgb(3 4 7 / 0.62);
   }
-  button.session-menu-trigger {
+  button.session-menu-trigger,
+  button.session-share {
     position: fixed;
     inset-block-end: max(1rem, env(safe-area-inset-bottom));
-    inset-inline-start: max(1rem, env(safe-area-inset-left));
     z-index: 3;
     display: inline-flex;
     align-items: center;
@@ -317,19 +317,56 @@
     inline-size: 2.75rem;
     min-block-size: 2.75rem;
     padding: 0;
-    border: 1px solid var(--color-fine-border);
+    border: 0;
     border-radius: 999px;
-    color: rgb(243 238 229 / 0.84);
-    background: rgb(3 4 7 / 0.62);
-    font-size: 1rem;
-    font-weight: 650;
-    backdrop-filter: blur(0.75rem);
-    transition: color 240ms var(--ease-calm), background 240ms var(--ease-calm);
+    color: rgb(243 238 229 / 0.42);
+    background: transparent;
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: color 400ms var(--ease-calm), background 400ms var(--ease-calm);
   }
+  button.session-menu-trigger { inset-inline-start: max(0.75rem, env(safe-area-inset-left)); }
+  button.session-share { inset-inline-end: max(0.75rem, env(safe-area-inset-right)); }
   button.session-menu-trigger:hover,
-  button.session-menu-trigger:focus-visible {
+  button.session-menu-trigger:focus-visible,
+  button.session-share:hover,
+  button.session-share:focus-visible {
+    color: rgb(243 238 229 / 0.92);
+    background: rgb(3 4 7 / 0.45);
+  }
+  aside.close-card {
+    position: fixed;
+    inset-block-end: max(4rem, calc(env(safe-area-inset-bottom) + 3.5rem));
+    inset-inline-start: 50%;
+    z-index: 3;
+    display: grid;
+    justify-items: center;
+    gap: var(--space-s);
+    inline-size: min(calc(100vw - 2rem), 28rem);
+    padding: var(--space-m);
+    border: 1px solid var(--color-fine-border);
+    border-radius: 1.25rem;
     color: var(--color-text);
-    background: rgb(3 4 7 / 0.72);
+    background: rgb(3 4 7 / 0.55);
+    text-align: center;
+    text-wrap: balance;
+    backdrop-filter: blur(1rem);
+    transform: translateX(-50%);
+    animation: close-card-in 1.6s var(--ease-calm) both;
+  }
+  aside.close-card p { font-size: var(--text-body); line-height: 1.45; }
+  aside.close-card .entry-actions { margin-block-start: 0; }
+  aside.close-card button.primary { min-inline-size: 0; min-block-size: 2.75rem; padding-block: 0.5rem; }
+  p.series-note {
+    max-inline-size: 28rem;
+    color: var(--color-muted);
+    font-size: var(--text-small);
+    line-height: 1.55;
+  }
+  p.series-note a {
+    color: var(--color-text);
+    text-decoration-color: rgb(216 213 191 / 0.4);
+    text-underline-offset: 0.2em;
   }
   dialog.session-menu {
     position: fixed;
@@ -480,6 +517,10 @@
 }
 
 @layer states {
+  @keyframes close-card-in {
+    from { opacity: 0; transform: translate(-50%, 0.75rem); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+  }
   @keyframes cue-words {
     0% { opacity: 0; transform: translate(-50%, 8rem); }
     22% { opacity: 1; transform: translate(-50%, 7.5rem); }

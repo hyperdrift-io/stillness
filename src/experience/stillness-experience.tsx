@@ -17,6 +17,7 @@ import {
 } from './session-controller.ts';
 import { cueWords, minutesLabel, observationLines } from './session-copy.ts';
 import { SessionMenu } from './session-menu.tsx';
+import { enterFullscreen, leaveFullscreen, shareStillness, shareUrl } from './share.ts';
 import { SessionTransitions, type SessionToken } from './session-transitions.ts';
 import {
   commandForKey,
@@ -29,6 +30,9 @@ type FeltState = 'lighter' | 'same' | 'tense';
 
 const cameraUnavailableMessage = 'Camera sensing is unavailable. The light carries the reset on its own.';
 const AMBIENT_CYCLE_MS = 10_000;
+// The quiet close: once stillness has fully settled and about five minutes
+// have passed, a small card asks how it went. The light keeps breathing.
+const CLOSE_INVITE_AFTER_MS = 270_000;
 
 const ambientVisualFrame: AdaptiveVisualControlFrame = {
   scene: 'release',
@@ -98,6 +102,8 @@ export function StillnessExperience() {
   const [cameraAvailable, setCameraAvailable] = useState(true);
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [felt, setFelt] = useState<FeltState | null>(null);
+  const [closeInvite, setCloseInvite] = useState(false);
+  const [shareNote, setShareNote] = useState('');
 
   if (audioRef.current === null) {
     audioRef.current = new BreathSoundscape(defaultSessionPreferences.sound);
@@ -145,6 +151,7 @@ export function StillnessExperience() {
     if (controller === null || token === null) return Promise.resolve();
 
     const sessionSummary = controller.summary();
+    leaveFullscreen();
     return transitionsRef.current.leave(token, () => controller.stop(), () => {
       cameraRequestRef.current += 1;
       if (controllerTokenRef.current === token) {
@@ -156,7 +163,8 @@ export function StillnessExperience() {
       setAudioAvailable(true);
       setCameraAvailable(true);
       setSummary(sessionSummary);
-      setFelt(null);
+      setCloseInvite(false);
+      setShareNote('');
       setMode('after');
       setMessage('');
       trackEvent('session_ended', {
@@ -217,10 +225,22 @@ export function StillnessExperience() {
     }
   }, [reportUnavailableCamera]);
 
-  const recordFeltState = useCallback((value: FeltState) => {
+  const recordFeltState = useCallback((value: FeltState, surface: 'close' | 'after') => {
     setFelt(value);
-    trackEvent('felt_state', { value, elapsed_seconds: summary?.elapsedSeconds ?? 0 });
+    const elapsedSeconds = surface === 'after'
+      ? summary?.elapsedSeconds ?? 0
+      : Math.round((controllerRef.current?.snapshot().elapsedMs ?? 0) / 1_000);
+    trackEvent('felt_state', { value, surface, elapsed_seconds: elapsedSeconds });
   }, [summary]);
+
+  const share = useCallback(async (surface: 'session' | 'close' | 'after') => {
+    const outcome = await shareStillness(surface);
+    setShareNote(outcome === 'copied'
+      ? 'Link copied. Send it to someone who needs a minute.'
+      : outcome === 'failed'
+        ? `Share this address: ${shareUrl()}`
+        : '');
+  }, []);
 
   useEffect(() => {
     if (mode !== 'ready' && mode !== 'after' && mode !== 'error') return;
@@ -333,7 +353,10 @@ export function StillnessExperience() {
     setCameraAvailable(preferences.camera);
     setSummary(null);
     setFelt(null);
+    setCloseInvite(false);
+    setShareNote('');
     stageStartCycleRef.current = { stage: 'arrive', cycle: 0 };
+    enterFullscreen();
 
     let controller: SessionController | null = null;
     try {
@@ -364,6 +387,13 @@ export function StillnessExperience() {
             });
           }
           setTelemetry(nextTelemetry);
+          if (
+            stage === 'still'
+            && nextTelemetry.pacer.stillness >= 1
+            && nextTelemetry.pacer.elapsedMs >= CLOSE_INVITE_AFTER_MS
+          ) {
+            setCloseInvite(true);
+          }
         },
         onCameraAvailabilityChange: (available) => {
           if (available) {
@@ -402,7 +432,8 @@ export function StillnessExperience() {
           camera: startResult.cameraStarted,
         });
       });
-    } catch {
+    } catch (error) {
+      console.error('Stillness could not open the light.', error);
       await controller?.stop();
       transitionsRef.current.fail(token, () => {
         if (controllerTokenRef.current === token) {
@@ -442,9 +473,9 @@ export function StillnessExperience() {
             {felt === null ? (
               <fieldset className="felt-state">
                 <legend>How do you feel?</legend>
-                <button type="button" onClick={() => recordFeltState('lighter')}>Lighter</button>
-                <button type="button" onClick={() => recordFeltState('same')}>About the same</button>
-                <button type="button" onClick={() => recordFeltState('tense')}>Still tense</button>
+                <button type="button" onClick={() => recordFeltState('lighter', 'after')}>Lighter</button>
+                <button type="button" onClick={() => recordFeltState('same', 'after')}>About the same</button>
+                <button type="button" onClick={() => recordFeltState('tense', 'after')}>Still tense</button>
               </fieldset>
             ) : (
               <p className="mode-note" role="status">
@@ -457,7 +488,16 @@ export function StillnessExperience() {
               <button className="primary" type="button" onClick={() => void begin()}>
                 Begin again
               </button>
+              <button type="button" className="quiet" onClick={() => void share('after')}>
+                Share the light
+              </button>
             </div>
+            {shareNote ? <p className="system-message" role="status">{shareNote}</p> : null}
+            <p className="series-note">
+              Stillness is one half of the Hyperdrift wellness pair.{' '}
+              <a href="https://greenlife.hyperdrift.io/?utm_source=stillness&utm_medium=series">GreenLife</a>
+              {' '}is the other: one daily nudge toward a lighter life.
+            </p>
           </div>
         ) : (
           <div className="entry-copy">
@@ -501,6 +541,51 @@ export function StillnessExperience() {
           >
             <span aria-hidden="true">?</span>
           </button>
+          <button
+            className="session-share"
+            type="button"
+            aria-label="Share Stillness"
+            onClick={() => void share('session')}
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3v12" />
+              <path d="M8 7l4-4 4 4" />
+              <path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7" />
+            </svg>
+          </button>
+          {closeInvite ? (
+            <aside className="close-card" aria-labelledby="close-card-title">
+              {felt === null ? (
+                <fieldset className="felt-state">
+                  <legend id="close-card-title">How do you feel?</legend>
+                  <button type="button" onClick={() => recordFeltState('lighter', 'close')}>Lighter</button>
+                  <button type="button" onClick={() => recordFeltState('same', 'close')}>About the same</button>
+                  <button type="button" onClick={() => recordFeltState('tense', 'close')}>Still tense</button>
+                </fieldset>
+              ) : (
+                <>
+                  <p id="close-card-title">
+                    {felt === 'lighter'
+                      ? 'Good. Someone you know needs this minute too.'
+                      : felt === 'same'
+                        ? 'Thank you. Stay as long as you like.'
+                        : 'Thank you. The light is here whenever you want it.'}
+                  </p>
+                  <div className="entry-actions">
+                    {felt === 'lighter' ? (
+                      <button className="primary" type="button" onClick={() => void share('close')}>
+                        Share the light
+                      </button>
+                    ) : null}
+                    <button type="button" className="quiet" onClick={() => void leave()}>
+                      Done
+                    </button>
+                  </div>
+                  {shareNote ? <p className="system-message" role="status">{shareNote}</p> : null}
+                </>
+              )}
+            </aside>
+          ) : null}
           <SessionMenu
             preferences={preferences}
             telemetry={telemetry}

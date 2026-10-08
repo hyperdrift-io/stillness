@@ -39,6 +39,22 @@ The camera never judges. With a trustworthy breath signal it speeds the glide wh
 - Face topology: the constellation in the first stages, which dissolves into the light as stillness arrives.
 - Raw frames never leave the device; only bounded aggregates are kept for calibration.
 
+## Colour (added the same evening, founder: "amaze the users through spectacular and captivating colour scheme cycles")
+
+- Each scene owns a cosine spectrum (Quilez palettes): crimson/violet/ember for Turbulence, amber/indigo for Gathering, gold/violet/teal for Coherence, aurora teal/magenta for Release, pearl/cyan/rose for Radiance. The spectrum tints the grammar's light while keeping its luminance.
+- The tint turns once every 72 s and sways 5% with each breath, and it varies continuously around and out from the centre, so trails carry several hues at once. No seam: the angular term is a cosine, never the raw angle.
+- The breath light moves between a warm pole on the inhale and a cool pole on the exhale; the pair travels from ember/magenta through gold/sky to pearl/aqua with the journey, and which pole the inhale favours drifts slowly with the cycle.
+- Safety unchanged: hue moves at 0.014 Hz and 0.1 Hz; luminance stays on the breath's eased ramp; no saturated red (crimson sits at R/(R+G+B) ≈ 0.6).
+- Gains after tuning at 60 fps: spectrum 0.95× luminance at 85% mix, chroma 1.4, lifted black 0.02, exposure 0.5 then 0.58, vignette 60% from radius 0.36. The scene grammar's clock runs at 0.22× and the feedback drift at 3% of its former per-frame value, both scaled by frame time, because the one-second feedback memory turns fast-moving patterns into fog.
+- **Tune in a real browser at 60 fps, never in the desktop app's browser pane**: the pane runs animation frames at about 1 fps, which keeps every emitted line crisp and the background black, a look no user sees. Headless Chrome through CDP (ANGLE Metal, 60 fps, float buffers) is the reference; Chrome's fake camera device (a moving colour-bar pattern) washes the field out, so capture without it. The founder's real-camera check still stands.
+
+## Session chrome and the quiet close (same evening)
+
+- The `?` trigger is discreet (no border, 42% opacity, bottom left); a share icon sits bottom right (Web Share API, clipboard fallback, `shared` event with its surface).
+- Begin asks for full screen; iPhone refuses and stays windowed; leaving the session exits full screen.
+- After stillness has fully settled and about 4.5 minutes have passed, a quiet card asks "How do you feel?" with Lighter / About the same / Still tense. "Lighter" offers "Share the light"; every answer offers Done. The light keeps breathing underneath; nobody is thrown out.
+- The end panel carries the GreenLife line: Stillness is the minute, GreenLife is the day.
+
 ## Sound
 
 Generated locally with Web Audio, on by default, toggled with M:
