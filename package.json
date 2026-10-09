@@ -3,6 +3,13 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=22 <26",
+      "onFail": "error"
+    }
+  },
   "packageManager": "npm@11.19.1",
   "engines": {
     "node": ">=22.10"
