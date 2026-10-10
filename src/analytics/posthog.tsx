@@ -14,6 +14,6 @@ export function Analytics() {
   if (!key) return null;
   // Register the app on load; the send hook also tags the initial pageview and
   // events queued before that callback, keeping archived Crew traffic separate.
-  const init = `posthog.init('${key}',{api_host:'${host}',defaults:'2026-01-30',person_profiles:'identified_only',autocapture:false,disable_session_recording:true,capture_pageview:true,capture_exceptions:true,loaded:function(ph){ph.register({app:'stillness'});},before_send:function(event){if(event){event.properties.app='stillness';}return event;}});`;
+  const init = `posthog.init('${key}',{api_host:'${host}',defaults:'2026-01-30',person_profiles:'identified_only',autocapture:false,disable_session_recording:true,capture_pageview:true,capture_exceptions:true,persistence:'memory',ip:false,loaded:function(ph){ph.register({app:'stillness'});},before_send:function(event){if(event){event.properties.app='stillness';}return event;}});`;
   return <script dangerouslySetInnerHTML={{ __html: LOADER + init }} />;
 }

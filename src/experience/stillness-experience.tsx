@@ -171,14 +171,6 @@ export function StillnessExperience() {
         elapsed_seconds: sessionSummary.elapsedSeconds,
         stage: sessionSummary.stage,
         sensed: sessionSummary.sensed,
-        breath_start: sessionSummary.breathsPerMinute.start ?? -1,
-        breath_end: sessionSummary.breathsPerMinute.end ?? -1,
-        heart_start: sessionSummary.heartBeatsPerMinute.start ?? -1,
-        heart_end: sessionSummary.heartBeatsPerMinute.end ?? -1,
-        movement_start: sessionSummary.movement.start ?? -1,
-        movement_end: sessionSummary.movement.end ?? -1,
-        tension_start: sessionSummary.tension.start ?? -1,
-        tension_end: sessionSummary.tension.end ?? -1,
       });
     });
   }, []);
@@ -225,13 +217,10 @@ export function StillnessExperience() {
     }
   }, [reportUnavailableCamera]);
 
-  const recordFeltState = useCallback((value: FeltState, surface: 'close' | 'after') => {
+  const recordFeltState = useCallback((value: FeltState) => {
+    // Felt-state feedback stays on this device; product analytics carry no health responses.
     setFelt(value);
-    const elapsedSeconds = surface === 'after'
-      ? summary?.elapsedSeconds ?? 0
-      : Math.round((controllerRef.current?.snapshot().elapsedMs ?? 0) / 1_000);
-    trackEvent('felt_state', { value, surface, elapsed_seconds: elapsedSeconds });
-  }, [summary]);
+  }, []);
 
   const share = useCallback(async (surface: 'session' | 'close' | 'after') => {
     const outcome = await shareStillness(surface);
@@ -465,7 +454,7 @@ export function StillnessExperience() {
       >
         {mode === 'after' && summary ? (
           <div className="entry-copy">
-            <p className="eyebrow">Stillness</p>
+            <p className="eyebrow">Stillness · research app</p>
             <h1 id="stillness-title">The slow breath is yours now.</h1>
             <ul className="observations" aria-label="What the light observed">
               {observations.map((line) => <li key={line}>{line}</li>)}
@@ -473,9 +462,9 @@ export function StillnessExperience() {
             {felt === null ? (
               <fieldset className="felt-state">
                 <legend>How do you feel?</legend>
-                <button type="button" onClick={() => recordFeltState('lighter', 'after')}>Lighter</button>
-                <button type="button" onClick={() => recordFeltState('same', 'after')}>About the same</button>
-                <button type="button" onClick={() => recordFeltState('tense', 'after')}>Still tense</button>
+                <button type="button" onClick={() => recordFeltState('lighter')}>Lighter</button>
+                <button type="button" onClick={() => recordFeltState('same')}>About the same</button>
+                <button type="button" onClick={() => recordFeltState('tense')}>Still tense</button>
               </fieldset>
             ) : (
               <p className="mode-note" role="status">
@@ -494,14 +483,14 @@ export function StillnessExperience() {
             </div>
             {shareNote ? <p className="system-message" role="status">{shareNote}</p> : null}
             <p className="series-note">
-              Stillness is one half of the Hyperdrift wellness pair.{' '}
+              Stillness is a research app by Hyperdrift.{' '}
               <a href="https://greenlife.hyperdrift.io/?utm_source=stillness&utm_medium=series">GreenLife</a>
-              {' '}is the other: one daily nudge toward a lighter life.
+              {' '}offers one daily nudge toward a lighter life.
             </p>
           </div>
         ) : (
           <div className="entry-copy">
-            <p className="eyebrow">Stillness</p>
+            <p className="eyebrow">Stillness · research app</p>
             <h1 id="stillness-title">Breathe with the light.</h1>
             <p>A few minutes. The light slows, you follow, and the noise thins out.</p>
             <div className="entry-actions">
@@ -514,7 +503,24 @@ export function StillnessExperience() {
                 {mode === 'starting' ? 'Opening' : 'Begin'}
               </button>
             </div>
-            <p className="mode-note">Sound on. Camera stays on this device. Nothing is saved or sent.</p>
+            <p className="mode-note">Sound on. Camera frames and body measurements stay on this device.</p>
+            <nav aria-label="About Stillness">
+              <a href="https://hyperdrift.io/?utm_source=stillness&utm_medium=app">By Hyperdrift</a>
+              <a href="https://greenlife.hyperdrift.io/?utm_source=stillness&utm_medium=app">Explore GreenLife</a>
+            </nav>
+            <details id="research" onToggle={(event) => { if (event.currentTarget.open) trackEvent('research_opened'); }}>
+              <summary>The research behind the light</summary>
+              <p>An open research app exploring how light and sound can guide a slower breath. Stillness has not been clinically validated and is not a medical device.</p>
+              <ul>
+                <li><a href="https://doi.org/10.1016/j.xcrm.2022.100895">Cyclic sighing</a>: a trial of five minutes of daily practice over a month informed the opening breaths.</li>
+                <li><a href="https://doi.org/10.1038/s41598-023-49279-8">Slow breathing and its limits</a>: a 400-person trial found no added benefit of 5.5 over 12 breaths a minute for its main stress outcome.</li>
+                <li><a href="https://doi.org/10.1038/s41598-025-24813-y">Light as a breathing cue</a>: a laboratory study explored a visual pacer; it did not test this app.</li>
+              </ul>
+              <p>Camera readings are experimental estimates. A clear signal is not proof of accuracy or a measure of calm. Breathe comfortably; pause if following the pace feels uncomfortable.</p>
+              <p><a href="https://hyperdrift.io/blog/a-mirror-that-never-shows-your-face?utm_source=stillness&amp;utm_medium=research">Read the original article (then called Relief)</a> · <a href="https://github.com/hyperdrift-io/stillness">Inspect the source</a></p>
+              <p>Background on Wikipedia: <a href="https://en.wikipedia.org/wiki/Breathing">breathing</a> and <a href="https://en.wikipedia.org/wiki/Photoplethysmogram">photoplethysmography</a>. These explain the concepts; they are not endorsements of Stillness.</p>
+              <p>Product analytics count visits, sessions and sharing. Camera frames, pulse, breath estimates and felt-state responses are not sent to PostHog. Aggregate calibration summaries stay in this browser.</p>
+            </details>
             {message ? <p className="system-message" role="status">{message}</p> : null}
           </div>
         )}
@@ -558,9 +564,9 @@ export function StillnessExperience() {
               {felt === null ? (
                 <fieldset className="felt-state">
                   <legend id="close-card-title">How do you feel?</legend>
-                  <button type="button" onClick={() => recordFeltState('lighter', 'close')}>Lighter</button>
-                  <button type="button" onClick={() => recordFeltState('same', 'close')}>About the same</button>
-                  <button type="button" onClick={() => recordFeltState('tense', 'close')}>Still tense</button>
+                  <button type="button" onClick={() => recordFeltState('lighter')}>Lighter</button>
+                  <button type="button" onClick={() => recordFeltState('same')}>About the same</button>
+                  <button type="button" onClick={() => recordFeltState('tense')}>Still tense</button>
                 </fieldset>
               ) : (
                 <>

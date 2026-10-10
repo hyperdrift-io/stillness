@@ -70,7 +70,8 @@
     inset: 0;
     z-index: 1;
     display: grid;
-    place-items: center;
+    place-items: safe center;
+    overflow-y: auto;
     padding: max(var(--space-l), env(safe-area-inset-top)) var(--space-l) max(var(--space-l), env(safe-area-inset-bottom));
   }
 }
@@ -558,4 +559,16 @@
       animation: none;
     }
   }
+}
+
+/* Research stays available before a session without competing with Begin. */
+@layer components {
+  .entry-copy nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.25rem 1.25rem; font-size: var(--text-small); }
+  .entry-copy :is(nav, details) a { color: var(--color-text); text-underline-offset: 0.22em; }
+  .entry-copy nav a { display: inline-flex; align-items: center; min-block-size: 2.75rem; }
+  .entry-copy #research { inline-size: min(100%, 36rem); color: var(--color-muted); text-align: left; font-size: var(--text-small); line-height: 1.65; }
+  .entry-copy #research summary { padding-block: 0.65rem; cursor: pointer; text-align: center; color: var(--color-text); }
+  .entry-copy #research p { margin-block: 1rem; }
+  .entry-copy #research ul { padding-inline-start: 1.25rem; }
+  .entry-copy #research li + li { margin-block-start: 0.65rem; }
 }

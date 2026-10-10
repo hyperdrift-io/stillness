@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Stillness",
   "short_name": "Stillness",
-  "description": "Breathe with the light. A private, few-minute reset that slows your breath and thins the noise.",
+  "description": "An open research app exploring slow breathing through light and sound. By Hyperdrift.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -1,13 +1,25 @@
-# Stillness
+# Stillness — an open breathing research app
 
-> Breathe with the light. Stillness is a private, few-minute reset in the browser: a light that swells and settles at a slowing pace, a sound that follows it, and a camera that stays on your device. Nothing to choose, nothing to score.
+> Stillness explores slow breathing through light and sound. It is a free, open-source browser experiment by Hyperdrift, not a clinically validated intervention or a medical device.
 
-## How it works
+## Experience and evidence
 
-- The light opens with cyclic sighing (two inhales, one long exhale), then glides to about six breaths a minute with a longer exhale: slow paced breathing is the best-supported way to lower arousal within minutes.
-- With camera permission, on-device face and shoulder landmarks sense breathing, movement and facial tension so the pace adapts and the session can report what it observed. Raw frames never leave the device.
-- Sound is generated locally: an ocean that rises with each inhale, a low ground tone and soft bells on each turn of the breath.
+- A light and locally generated sound guide an opening breathing sequence, cyclic sighs and a gradual pace near 5.5 breaths per minute. This sequence is a design choice, not a tested clinical protocol.
+- Optional camera processing estimates shoulder motion and pulse frequency on the device. It does not measure HRV, determine an individual resonance frequency, diagnose stress or infer emotion.
+- Published research informs the design. It does not establish Stillness's effectiveness or sensor accuracy. The source studies and limitations are linked on the homepage.
+- Camera frames, physiological estimates and felt-state feedback stay on the device. Bounded aggregate summaries persist locally for calibration. Product analytics count visits, session use and sharing; replay and autocapture are disabled.
 
-## Pages
+## Explore
 
-- [Stillness](https://stillness.hyperdrift.io/): begin a reset
+- [Stillness](https://stillness.hyperdrift.io/): try the experience
+- [Research and sources](https://stillness.hyperdrift.io/#research): studies, limitations and data handling
+- [Original article](https://hyperdrift.io/blog/a-mirror-that-never-shows-your-face): the first prototype, then called Relief
+- [Source code](https://github.com/hyperdrift-io/stillness): inspect the implementation
+- [Hyperdrift](https://hyperdrift.io/): the independent studio behind Stillness
+- [GreenLife](https://greenlife.hyperdrift.io/): a free daily practice toward a simpler life
+
+## Primary sources
+
+- [Balban et al. (2023)](https://doi.org/10.1016/j.xcrm.2022.100895): daily breathwork over a month; not a Stillness trial
+- [Fincham et al. (2023)](https://doi.org/10.1038/s41598-023-49279-8): 400-person active-control trial; no added benefit of 5.5 over 12 breaths/min for the primary stress outcome
+- [Canazei et al. (2025)](https://doi.org/10.1038/s41598-025-24813-y): laboratory light-guided breathing; a different interface and protocol

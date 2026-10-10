@@ -50,3 +50,7 @@ npm run build
 ## Prototype loop
 
 Stillness is a prototype in discovery until real people depend on it and the founder promotes it to hardening. While shaping it, the live preview is the only check; type check, build and the existing tests run at the release gate. A finished change merges to `main`, the root pin is bumped, and production moves with `cd infra && make deploy app=stillness` from a `release-watch` subagent (there is no deploy workflow). Read the signal in PostHog afterwards.
+
+## Research positioning (10 October 2026)
+
+Founder direction: present Stillness as an open research app, visibly connected to Hyperdrift and GreenLife, with primary sources and the existing article. This changes its public framing, not its approved breathing journey. Published studies inform the design; Stillness itself has not been clinically validated. Never transfer a study's effect, accuracy or population to this implementation. Camera frames, physiological estimates and felt-state responses stay on device; PostHog is for product use and sharing only, with autocapture and replay disabled.
