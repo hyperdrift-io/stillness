@@ -518,6 +518,12 @@ export function StillnessExperience() {
               </ul>
               <p>Camera readings are experimental estimates. A clear signal is not proof of accuracy or a measure of calm. Breathe comfortably; pause if following the pace feels uncomfortable.</p>
               <p><a href="https://hyperdrift.io/blog/a-mirror-that-never-shows-your-face?utm_source=stillness&amp;utm_medium=research">Read the original article (then called Relief)</a> · <a href="https://github.com/hyperdrift-io/stillness">Inspect the source</a></p>
+              <p>Read the Stillness research series:</p>
+              <ol>
+                <li><a href="https://hyperdrift.io/blog/calm-is-a-rate-you-can-be-led-to?utm_source=stillness&amp;utm_medium=research">Six breaths a minute is a starting point</a></li>
+                <li><a href="https://hyperdrift.io/blog/a-light-you-can-breathe-with?utm_source=stillness&amp;utm_medium=research">A light you can breathe with</a></li>
+                <li><a href="https://hyperdrift.io/blog/a-camera-can-estimate-a-pulse-not-a-feeling?utm_source=stillness&amp;utm_medium=research">A camera can estimate a pulse, not a feeling</a></li>
+              </ol>
               <p>Background on Wikipedia: <a href="https://en.wikipedia.org/wiki/Breathing">breathing</a> and <a href="https://en.wikipedia.org/wiki/Photoplethysmogram">photoplethysmography</a>. These explain the concepts; they are not endorsements of Stillness.</p>
               <p>Product analytics count visits, sessions and sharing. Camera frames, pulse, breath estimates and felt-state responses are not sent to PostHog. Aggregate calibration summaries stay in this browser.</p>
             </details>

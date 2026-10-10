@@ -569,6 +569,6 @@
   .entry-copy #research { inline-size: min(100%, 36rem); color: var(--color-muted); text-align: left; font-size: var(--text-small); line-height: 1.65; }
   .entry-copy #research summary { padding-block: 0.65rem; cursor: pointer; text-align: center; color: var(--color-text); }
   .entry-copy #research p { margin-block: 1rem; }
-  .entry-copy #research ul { padding-inline-start: 1.25rem; }
+  .entry-copy #research :is(ul, ol) { padding-inline-start: 1.25rem; }
   .entry-copy #research li + li { margin-block-start: 0.65rem; }
 }

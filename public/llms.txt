@@ -23,3 +23,9 @@
 - [Balban et al. (2023)](https://doi.org/10.1016/j.xcrm.2022.100895): daily breathwork over a month; not a Stillness trial
 - [Fincham et al. (2023)](https://doi.org/10.1038/s41598-023-49279-8): 400-person active-control trial; no added benefit of 5.5 over 12 breaths/min for the primary stress outcome
 - [Canazei et al. (2025)](https://doi.org/10.1038/s41598-025-24813-y): laboratory light-guided breathing; a different interface and protocol
+
+## Research articles
+
+- [Six breaths a minute is a starting point](https://hyperdrift.io/blog/calm-is-a-rate-you-can-be-led-to): slow-breathing evidence and limits.
+- [A light you can breathe with](https://hyperdrift.io/blog/a-light-you-can-breathe-with): visual cueing and controlled comparisons.
+- [A camera can estimate a pulse, not a feeling](https://hyperdrift.io/blog/a-camera-can-estimate-a-pulse-not-a-feeling): camera measurements, validation and privacy.

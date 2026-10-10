@@ -36,5 +36,7 @@ First verify fresh production events and their payload boundary. Then distinguis
 - Visible Stillness and GreenLife links on Hyperdrift's homepage.
 - Original article: `/blog/a-mirror-that-never-shows-your-face`.
 - Primary sources and limitations on Stillness's `#research` disclosure.
-- Research series held for founder review in the Hyperdrift editorial workspace; it is not public until approved and deployed.
+- Founder-approved research series on breathing, light cues and camera measurements; the app links each canonical article.
 - Social sharing through the existing in-app share action and 1200 × 630 OG card.
+
+The research series is linked from the app, the Hyperdrift homepage and the original face-free experiment. Its three canonical articles cover [breathing evidence](https://hyperdrift.io/blog/calm-is-a-rate-you-can-be-led-to), [light cues](https://hyperdrift.io/blog/a-light-you-can-breathe-with), and [camera estimates](https://hyperdrift.io/blog/a-camera-can-estimate-a-pulse-not-a-feeling). Read discovery separately from scientific validation. [Product-use dashboard](https://eu.posthog.com/project/206943/dashboard/1012663) filters this app and excludes marked QA visits.
