@@ -18,6 +18,7 @@ import {
 import { cueWords, minutesLabel, observationLines } from './session-copy.ts';
 import { SessionMenu } from './session-menu.tsx';
 import { enterFullscreen, leaveFullscreen, shareStillness, shareUrl } from './share.ts';
+import { keepScreenAwake } from './wake-lock.ts';
 import { SessionTransitions, type SessionToken } from './session-transitions.ts';
 import {
   commandForKey,
@@ -88,6 +89,7 @@ export function StillnessExperience() {
   const rendererRef = useRef<SoulMirrorRenderer | null>(null);
   const controllerTokenRef = useRef<SessionToken | null>(null);
   const cameraRequestRef = useRef(0);
+  const releaseWakeLockRef = useRef<() => void>(() => {});
   const transitionsRef = useRef(new SessionTransitions());
   const baselineRef = useRef(new BaselineStore());
   const stageStartCycleRef = useRef<{ stage: PacerStage; cycle: number }>({ stage: 'arrive', cycle: 0 });
@@ -152,6 +154,7 @@ export function StillnessExperience() {
 
     const sessionSummary = controller.summary();
     leaveFullscreen();
+    releaseWakeLockRef.current();
     return transitionsRef.current.leave(token, () => controller.stop(), () => {
       cameraRequestRef.current += 1;
       if (controllerTokenRef.current === token) {
@@ -269,6 +272,7 @@ export function StillnessExperience() {
       cameraRequestRef.current += 1;
       controllerRef.current = null;
       controllerTokenRef.current = null;
+      releaseWakeLockRef.current();
       void controller?.stop();
       if (controller === null) {
         rendererRef.current?.dispose();
@@ -346,6 +350,8 @@ export function StillnessExperience() {
     setShareNote('');
     stageStartCycleRef.current = { stage: 'arrive', cycle: 0 };
     enterFullscreen();
+    releaseWakeLockRef.current();
+    releaseWakeLockRef.current = keepScreenAwake();
 
     let controller: SessionController | null = null;
     try {
@@ -423,6 +429,7 @@ export function StillnessExperience() {
       });
     } catch (error) {
       console.error('Stillness could not open the light.', error);
+      releaseWakeLockRef.current();
       await controller?.stop();
       transitionsRef.current.fail(token, () => {
         if (controllerTokenRef.current === token) {
