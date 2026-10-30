@@ -49,7 +49,7 @@ npm run build
 
 ## Prototype loop
 
-Stillness is a prototype in discovery until real people depend on it and the founder promotes it to hardening. While shaping it, the live preview is the only check; type check, build and the existing tests run at the release gate. A finished change merges to `main`, the root pin is bumped, and production moves with `cd infra && make deploy app=stillness` from a `release-watch` subagent (there is no deploy workflow). Read the signal in PostHog afterwards.
+Stillness is a prototype in discovery until real people depend on it and the founder promotes it to hardening. While shaping it, the live preview is the only check; type check, build and the existing tests run at the release gate. Commit to main and push. After the founder's yes on the preview, deploy with `make deploy app=stillness` from a worktree of infra origin/main. Pins follow automatically. Read the signal in PostHog afterwards.
 
 ## Research positioning (10 October 2026)
 
